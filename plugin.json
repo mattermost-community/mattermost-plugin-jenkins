@@ -1,0 +1,35 @@
+{
+    "id": "jenkins",
+    "name": "Mattermost plugin to interact with Jenkins",
+    "description": "A Jenkins plugin for Mattermost",
+    "version": "0.0.1",
+    "server": {
+        "executables": {
+            "linux-amd64": "server/dist/plugin-linux-amd64",
+            "darwin-amd64": "server/dist/plugin-darwin-amd64",
+            "windows-amd64": "server/dist/plugin-windows-amd64.exe"
+        }
+    },
+    "settings_schema": {
+        "header": "To report an issue, make a suggestion or a contribution, or fork your own version of the plugin, [check the repository](https://github.com/waseem18/mattermost-plugin-jenkins).",
+        "settings": [
+            {
+                "key": "JenkinsURL",
+                "display_name": "Jenkins URL",
+                "type": "text"
+            },
+            {
+                "key": "Username",
+                "display_name": "User",
+                "type": "username",
+                "help_text": "Select the username of the user that the plugin will post with. This can be any user, the name and icon will be overridden when posting."
+            },
+            {
+                "key": "EncryptionKey",
+                "display_name": "At Rest Encryption Key",
+                "type": "generated",
+                "help_text": "The AES encryption key used to encrypt stored access tokens."
+            }
+        ]
+    }
+}
