@@ -1,7 +1,7 @@
 {
     "id": "jenkins",
-    "name": "Mattermost plugin to interact with Jenkins",
-    "description": "A Jenkins plugin for Mattermost",
+    "name": "Jenkins plugin",
+    "description": "Jenkins plugin for Mattermost",
     "version": "0.0.1",
     "server": {
         "executables": {

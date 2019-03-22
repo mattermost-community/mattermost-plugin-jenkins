@@ -3,9 +3,11 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"sync"
 
 	"github.com/mattermost/mattermost-server/plugin"
+	"github.com/mattermost/mattermost-server/mlog"
 )
 
 const (
@@ -25,6 +27,7 @@ type Plugin struct {
 }
 
 type JenkinsUserInfo struct {
+	UserID   string
 	Username string
 	Token    string
 }
@@ -49,7 +52,7 @@ func (p *Plugin) storeJenkinsUserInfo(info *JenkinsUserInfo) error {
 		return err
 	}
 
-	if err := p.API.KVSet(info.Username+jenkinsTokenKey, jsonInfo); err != nil {
+	if err := p.API.KVSet(info.UserID+jenkinsTokenKey, jsonInfo); err != nil {
 		return err
 	}
 
@@ -69,11 +72,25 @@ func (p *Plugin) getJenkinsUserInfo(userID string) (*JenkinsUserInfo, error) {
 
 	unencryptedToken, err := decrypt([]byte(config.EncryptionKey), userInfo.Token)
 	if err != nil {
-		fmt.Println(err.Error())
+		mlog.Error(err.Error())
 		return nil, err
 	}
 
 	userInfo.Token = unencryptedToken
 
 	return &userInfo, nil
+}
+
+// verifyJenkinsCredentials verifies the authenticity of the username and token
+// by sending a GET call to the Jenkins URL specified in the config.
+func (p *Plugin) verifyJenkinsCredentials(username, token string) bool {
+	pluginConfig := p.getConfiguration()
+	url := fmt.Sprintf("http://%s:%s@%s", username, token, pluginConfig.JenkinsURL)
+
+	response, _ := http.Get(url)
+
+	if response.StatusCode == 200 {
+		return true
+	}
+	return false
 }
