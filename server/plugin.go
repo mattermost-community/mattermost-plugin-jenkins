@@ -2,12 +2,16 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"github.com/mattermost/mattermost-server/model"
 	"net/http"
+	"strings"
 	"sync"
+	"time"
 
+	"github.com/bndr/gojenkins"
 	"github.com/mattermost/mattermost-server/plugin"
-	"github.com/mattermost/mattermost-server/mlog"
 )
 
 const (
@@ -72,7 +76,7 @@ func (p *Plugin) getJenkinsUserInfo(userID string) (*JenkinsUserInfo, error) {
 
 	unencryptedToken, err := decrypt([]byte(config.EncryptionKey), userInfo.Token)
 	if err != nil {
-		mlog.Error(err.Error())
+		p.API.LogError(err.Error())
 		return nil, err
 	}
 
@@ -93,4 +97,79 @@ func (p *Plugin) verifyJenkinsCredentials(username, token string) bool {
 		return true
 	}
 	return false
+}
+
+func (p *Plugin) createEphemeralPost(userID, channelID string) {
+	post := &model.Post{
+		UserId:    userID,
+		ChannelId: channelID,
+		Message:   buildTriggerResponse,
+		Type:      model.POST_DEFAULT,
+		Props: map[string]interface{}{
+			"from_webhook":      "true",
+			"override_username": jenkinsUsername,
+			"override_icon_url": p.getConfiguration().ProfileImageURL,
+		},
+	}
+	p.API.SendEphemeralPost(userID, post)
+}
+
+func (p *Plugin) createJenkinsClient(userID string) (*gojenkins.Jenkins, error) {
+	pluginConfig := p.getConfiguration()
+	userInfo, err := p.getJenkinsUserInfo(userID)
+	if err != nil {
+		return nil, errors.New("Error fetching Jenkins user info " + err.Error())
+	}
+
+	jenkins := gojenkins.CreateJenkins(nil, "http://"+pluginConfig.JenkinsURL, userInfo.Username, userInfo.Token)
+	_, errJenkins := jenkins.Init()
+	if errJenkins != nil {
+		p.API.LogError("Error creating the jenkins client", "Err", errJenkins.Error())
+		return nil, errors.New("Error creating the jenkins client " + err.Error())
+	}
+	return jenkins, nil
+}
+
+func (p *Plugin) triggerJenkinsJob(userID, channelID, jobName string) (*gojenkins.Build, error) {
+	jenkins, jenkinsErr := p.createJenkinsClient(userID)
+	if jenkinsErr != nil {
+		return nil, jenkinsErr
+	}
+
+	jobName = strings.TrimLeft(strings.TrimRight(jobName, `\"`), `\"`)
+
+	containsSlash := strings.Contains(jobName, "/")
+	if containsSlash {
+		jobName = strings.Replace(jobName, "/", "/job/", -1)
+	}
+
+	buildQueueID, buildErr := jenkins.BuildJob(jobName)
+	if buildErr != nil {
+		return nil, errors.New("Error building the job. " + buildErr.Error())
+	}
+
+	task, taskErr := jenkins.GetQueueItem(buildQueueID)
+	if taskErr != nil {
+		return nil, errors.New("Error fetching job details from queue. " + taskErr.Error())
+	}
+
+	p.createEphemeralPost(userID, channelID)
+
+	// Polling the job to see if the build has started
+	retry := 10
+	for retry > 0 {
+		if task.Raw.Executable.URL != "" {
+			break
+		}
+		time.Sleep(10 * time.Second)
+		task.Poll()
+		retry--
+	}
+
+	buildInfo, buildErr := jenkins.GetBuild(jobName, task.Raw.Executable.Number)
+	if buildErr != nil {
+		return nil, errors.New("Error fetching the build details. " + buildErr.Error())
+	}
+
+	return buildInfo, nil
 }

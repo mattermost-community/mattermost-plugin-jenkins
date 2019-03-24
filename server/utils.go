@@ -11,6 +11,8 @@ import (
 	"encoding/base64"
 	"errors"
 	"io"
+	"regexp"
+	"strings"
 )
 
 func pad(src []byte) []byte {
@@ -76,4 +78,12 @@ func decrypt(key []byte, text string) (string, error) {
 	}
 
 	return string(unpadMsg), nil
+}
+
+func parseJobName(parameters []string) string {
+	tempString := strings.Join(parameters, " ")
+	regex, _ := regexp.Compile(`\"(.*?)\"`)
+	tempString = regex.FindString(tempString)
+	tempString = strings.TrimLeft(strings.TrimRight(tempString, `\"`), `\"`)
+	return tempString
 }

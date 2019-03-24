@@ -1,15 +1,21 @@
 package main
 
 import (
-	"fmt"
-	"github.com/mattermost/mattermost-server/mlog"
 	"github.com/mattermost/mattermost-server/model"
 	"github.com/mattermost/mattermost-server/plugin"
-	"net/http"
 	"strings"
 )
 
-const helpText = `* |/jenkins connect <username> <API Token>| - Connect your Mattermost account to Jenkins`
+const helpText = `* |/jenkins connect username API Token| - Connect your Mattermost account to Jenkins
+* |/jenkins build jobname - Trigger a job build
+* |/jenkins build "jobname with space" - Trigger a job which has space in the job name. Note the double quotes
+* |/jenkins build folder/jobname - Trigger a job inside a folder. Note the character '/'
+* |/jenkins build "folder name/job name with space" - Trigger a job inside a folder with space in job name or folder name. Note double quotes and the character '/'`
+
+const buildTriggerResponse = "Build has been triggered and is in queue."
+const buildStartResponse = "Build started. Here's the build URL : "
+const jobNotSpecifiedResponse = "Please specify a job name to build."
+const jenkinsConnectedResponse = "Jenkins has been connected."
 
 func getCommand() *model.Command {
 	return &model.Command{
@@ -33,8 +39,6 @@ func (p *Plugin) getCommandResponse(responseType, text string) *model.CommandRes
 }
 
 func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*model.CommandResponse, *model.AppError) {
-	pluginConfig := p.getConfiguration()
-
 	split := strings.Fields(args.Command)
 	command := split[0]
 	parameters := []string{}
@@ -49,7 +53,6 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*mo
 	if command != "/jenkins" {
 		return &model.CommandResponse{}, nil
 	}
-
 	switch action {
 	case "connect":
 		if len(parameters) == 0 || len(parameters) == 1 {
@@ -66,39 +69,33 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*mo
 			}
 			err := p.storeJenkinsUserInfo(jenkinsUserInfo)
 			if err != nil {
-				mlog.Error("Error saving Jenkins user information to KV store" + err.Error())
+				p.API.LogError("Error saving Jenkins user information to KV store", "Err", err.Error())
 				return &model.CommandResponse{}, nil
 			}
-			return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Jenkins has been connected."), nil
+			return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, jenkinsConnectedResponse), nil
 		}
 	case "build":
-		userInfo, err := p.getJenkinsUserInfo(args.UserId)
-		if err != nil {
-			mlog.Error(err.Error())
-			return &model.CommandResponse{}, nil
-		}
 		if len(parameters) == 0 {
-			return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Please specify the job name."), nil
+			return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, jobNotSpecifiedResponse), nil
 		} else if len(parameters) == 1 {
-			jenkinsBaseURL := fmt.Sprintf("http://%s:%s@%s", userInfo.Username, userInfo.Token, pluginConfig.JenkinsURL)
 			jobName := parameters[0]
-			jobURL := fmt.Sprintf("%s/job/%s/build", jenkinsBaseURL, jobName)
-			response, err := http.Post(jobURL, "", nil)
-			if err != nil {
-				mlog.Error(err.Error())
+			buildInfo, buildErr := p.triggerJenkinsJob(args.UserId, args.ChannelId, jobName)
+			if buildErr != nil {
+				p.API.LogError(buildErr.Error())
+				return &model.CommandResponse{}, nil
 			}
-			if response.StatusCode == 401 {
-				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Your Jenkins account doesn't have enough permissions to build the job."), nil
-			} else if response.StatusCode == 404 {
-				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Job doesn't exist."), nil
-			} else if response.StatusCode == 201 {
-				locationHeader := response.Header.Get("Location")
-				splitBuildQueueURL := strings.Split(locationHeader, "/")
-				buildNumber := splitBuildQueueURL[len(splitBuildQueueURL)-2]
-				buildURL := fmt.Sprintf("http://%s/job/%s/%s", pluginConfig.JenkinsURL, jobName, buildNumber)
-				message := fmt.Sprintf("Started job '%s' - %s", jobName, buildURL)
-				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, message), nil
+
+			commandResponse := p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, buildStartResponse+buildInfo.GetUrl())
+			return commandResponse, nil
+		} else if len(parameters) > 1 {
+			jobName := parseJobName(parameters)
+			buildInfo, buildErr := p.triggerJenkinsJob(args.UserId, args.ChannelId, jobName)
+			if buildErr != nil {
+				p.API.LogError(buildErr.Error())
+				return &model.CommandResponse{}, nil
 			}
+			commandResponse := p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, buildStartResponse+buildInfo.GetUrl())
+			return commandResponse, nil
 		}
 	}
 	return &model.CommandResponse{}, nil
