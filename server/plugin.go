@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/mattermost/mattermost-server/model"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -89,7 +90,7 @@ func (p *Plugin) getJenkinsUserInfo(userID string) (*JenkinsUserInfo, error) {
 // by sending a GET call to the Jenkins URL specified in the config.
 func (p *Plugin) verifyJenkinsCredentials(username, token string) bool {
 	pluginConfig := p.getConfiguration()
-	url := fmt.Sprintf("http://%s:%s@%s", username, token, pluginConfig.JenkinsURL)
+	url := fmt.Sprintf("https://%s:%s@%s", username, token, pluginConfig.JenkinsURL)
 
 	response, _ := http.Get(url)
 
@@ -99,11 +100,11 @@ func (p *Plugin) verifyJenkinsCredentials(username, token string) bool {
 	return false
 }
 
-func (p *Plugin) createEphemeralPost(userID, channelID string) {
+func (p *Plugin) createEphemeralPost(userID, channelID, message string) {
 	post := &model.Post{
 		UserId:    userID,
 		ChannelId: channelID,
-		Message:   buildTriggerResponse,
+		Message:   message,
 		Type:      model.POST_DEFAULT,
 		Props: map[string]interface{}{
 			"from_webhook":      "true",
@@ -114,6 +115,21 @@ func (p *Plugin) createEphemeralPost(userID, channelID string) {
 	p.API.SendEphemeralPost(userID, post)
 }
 
+func (p *Plugin) createPost(userID, channelID, message string) {
+	post := &model.Post{
+		UserId:    userID,
+		ChannelId: channelID,
+		Message:   message,
+		Type:      model.POST_DEFAULT,
+		Props: map[string]interface{}{
+			"from_webhook":      "true",
+			"override_username": jenkinsUsername,
+			"override_icon_url": p.getConfiguration().ProfileImageURL,
+		},
+	}
+	p.API.CreatePost(post)
+}
+
 func (p *Plugin) createJenkinsClient(userID string) (*gojenkins.Jenkins, error) {
 	pluginConfig := p.getConfiguration()
 	userInfo, err := p.getJenkinsUserInfo(userID)
@@ -121,7 +137,7 @@ func (p *Plugin) createJenkinsClient(userID string) (*gojenkins.Jenkins, error) 
 		return nil, errors.New("Error fetching Jenkins user info " + err.Error())
 	}
 
-	jenkins := gojenkins.CreateJenkins(nil, "http://"+pluginConfig.JenkinsURL, userInfo.Username, userInfo.Token)
+	jenkins := gojenkins.CreateJenkins(nil, "https://"+pluginConfig.JenkinsURL, userInfo.Username, userInfo.Token)
 	_, errJenkins := jenkins.Init()
 	if errJenkins != nil {
 		p.API.LogError("Error creating the jenkins client", "Err", errJenkins.Error())
@@ -153,7 +169,7 @@ func (p *Plugin) triggerJenkinsJob(userID, channelID, jobName string) (*gojenkin
 		return nil, errors.New("Error fetching job details from queue. " + taskErr.Error())
 	}
 
-	p.createEphemeralPost(userID, channelID)
+	p.createEphemeralPost(userID, channelID, buildTriggerResponse)
 
 	// Polling the job to see if the build has started
 	retry := 10
@@ -172,4 +188,89 @@ func (p *Plugin) triggerJenkinsJob(userID, channelID, jobName string) (*gojenkin
 	}
 
 	return buildInfo, nil
+}
+
+func (p *Plugin) fetchAndUploadArtifactsOfABuild(userID, channelID, jobName, buildNumber string) error {
+	config := p.API.GetConfig()
+
+	jenkins, jenkinsErr := p.createJenkinsClient(userID)
+	if jenkinsErr != nil {
+		p.API.LogError(jenkinsErr.Error())
+		return jenkinsErr
+	}
+
+	job, jobErr := jenkins.GetJob(jobName)
+	if jobErr != nil {
+		p.API.LogError(jobErr.Error())
+		return jobErr
+	}
+
+	buildNumberInt64, err := strconv.ParseInt(buildNumber, 10, 64)
+	if err != nil {
+		p.API.LogError(err.Error())
+		return jenkinsErr
+	}
+
+	build, buildErr := job.GetBuild(buildNumberInt64)
+	if buildErr != nil {
+		p.API.LogError(buildErr.Error())
+		return jenkinsErr
+	}
+
+	artifacts := build.GetArtifacts()
+	if len(artifacts) == 0 {
+		p.createEphemeralPost(userID, channelID, "Not artifacts found.")
+	}
+	for _, a := range artifacts {
+		fileData, _ := a.GetData()
+		fileInfo, err := p.API.UploadFile(fileData, channelID, a.FileName)
+		if err != nil {
+			p.API.LogError("Error uploading file with the name", a.FileName)
+		}
+		p.createPost(userID, channelID, "Here's the artifact : "+*config.ServiceSettings.SiteURL+"/api/v4/files/"+fileInfo.Id)
+	}
+	return nil
+}
+
+func (p *Plugin) fetchTestReportsLinkOfABuild(userID, channelID string, parameters []string) (string, error) {
+	jobName := parameters[0]
+	jenkins, jenkinsErr := p.createJenkinsClient(userID)
+	if jenkinsErr != nil {
+		p.API.LogError(jenkinsErr.Error())
+		return "", jenkinsErr
+	}
+
+	job, jobErr := jenkins.GetJob(jobName)
+	if jobErr != nil {
+		p.API.LogError(jobErr.Error())
+		return "", jenkinsErr
+	}
+
+	lastBuild, buildErr := job.GetLastBuild()
+	if buildErr != nil {
+		return "", buildErr
+	}
+	pluginConfig := p.getConfiguration()
+	userInfo, userInfoErr := p.getJenkinsUserInfo(userID)
+	if userInfoErr != nil {
+		return "", userInfoErr
+	}
+	// TODO: Use gojenkins package if the requirement is to fetch the test results
+	// rather than replying to the slash command with the test reports link.
+	testReportInternalURL := fmt.Sprintf("https://%s:%s@%s/job/%s/%d/testReport", userInfo.Username, userInfo.Token, pluginConfig.JenkinsURL, jobName, lastBuild.GetBuildNumber())
+	testReportAPIURL := testReportInternalURL + "/api/json"
+
+	response, respErr := http.Get(testReportAPIURL)
+	if respErr != nil {
+		return "", respErr
+	}
+	
+	if response.StatusCode == 200 {
+		testReportsURL := fmt.Sprintf("https://%s/job/%s/%d/testReport", pluginConfig.JenkinsURL, jobName, lastBuild.GetBuildNumber())
+		return "Test reports URL: " + testReportsURL, nil
+	} else if response.StatusCode == 404 {
+		return "Test reports for the job " + jobName + " doesn't exist", nil
+	}
+
+	return "", errors.New("Error fetching test results")
 }

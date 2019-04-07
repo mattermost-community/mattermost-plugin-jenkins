@@ -1,9 +1,10 @@
 package main
 
 import (
+	"strings"
+
 	"github.com/mattermost/mattermost-server/model"
 	"github.com/mattermost/mattermost-server/plugin"
-	"strings"
 )
 
 const helpText = `* |/jenkins connect username API Token| - Connect your Mattermost account to Jenkins
@@ -96,6 +97,31 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*mo
 			}
 			commandResponse := p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, buildStartResponse+buildInfo.GetUrl())
 			return commandResponse, nil
+		}
+	case "get-artifacts":
+		if len(parameters) == 0 {
+			return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, jobNotSpecifiedResponse), nil
+		} else if len(parameters) == 1 {
+			return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Please specify both job name and build number to get artifacts from."), nil
+		} else if len(parameters) == 2 {
+			p.createEphemeralPost(args.UserId, args.ChannelId, "Fetching build artifacts")
+			err := p.fetchAndUploadArtifactsOfABuild(args.UserId, args.ChannelId, parameters[0], parameters[1])
+			if err != nil {
+				p.API.LogError(err.Error())
+				return &model.CommandResponse{}, nil
+			}
+		}
+	case "test-results":
+		if len(parameters) == 0 {
+			return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, jobNotSpecifiedResponse), nil
+		} else if len(parameters) == 1 {
+			p.createEphemeralPost(args.UserId, args.ChannelId, "Fetching test results...")
+			testReportMsg, err := p.fetchTestReportsLinkOfABuild(args.UserId, args.ChannelId, parameters)
+			if err != nil {
+				p.API.LogError(err.Error())
+				return &model.CommandResponse{}, nil
+			}
+			p.createEphemeralPost(args.UserId, args.ChannelId, testReportMsg)
 		}
 	}
 	return &model.CommandResponse{}, nil
