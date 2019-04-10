@@ -16,7 +16,8 @@
             {
                 "key": "JenkinsURL",
                 "display_name": "Jenkins URL",
-                "type": "text"
+                "type": "text",
+                "help_text": "Specify the URL with the protocol. Either 'http' or 'https'."
             },
             {
                 "key": "Username",
