@@ -80,10 +80,13 @@ func decrypt(key []byte, text string) (string, error) {
 	return string(unpadMsg), nil
 }
 
-func parseJobName(parameters []string) string {
+func parseJobName(parameters []string) (string, bool) {
 	tempString := strings.Join(parameters, " ")
 	regex, _ := regexp.Compile(`\"(.*?)\"`)
 	tempString = regex.FindString(tempString)
+	if tempString == "" {
+		return "", false
+	}
 	tempString = strings.TrimLeft(strings.TrimRight(tempString, `\"`), `\"`)
-	return tempString
+	return tempString, true
 }

@@ -198,17 +198,15 @@ func (p *Plugin) triggerJenkinsJob(userID, channelID, jobName string) (*gojenkin
 		return nil, errors.New("Error fetching job details from queue. " + taskErr.Error())
 	}
 
-	p.createEphemeralPost(userID, channelID, "Build has been triggered and is in queue.")
+	p.createEphemeralPost(userID, channelID, fmt.Sprintf("Build for the job '%s' has been triggered and is in queue.", jobName))
 
 	// Polling the job to see if the build has started
-	retry := 10
-	for retry > 0 {
+	for {
 		if task.Raw.Executable.URL != "" {
 			break
 		}
-		time.Sleep(10 * time.Second)
+		time.Sleep(30 * time.Second)
 		task.Poll()
-		retry--
 	}
 
 	buildInfo, buildErr := jenkins.GetBuild(jobName, task.Raw.Executable.Number)
@@ -248,13 +246,13 @@ func (p *Plugin) fetchAndUploadArtifactsOfABuild(userID, channelID, jobName stri
 	for _, a := range artifacts {
 		fileData, fileDataErr := a.GetData()
 		if fileDataErr != nil {
-			p.API.LogError("Error uploading file with the name", a.FileName)
+			p.API.LogError("Error uploading file", "file_name", a.FileName)
 			return fileDataErr
 		}
 		p.createEphemeralPost(userID, channelID, fmt.Sprintf("Uploading artifact '%s' ...", a.FileName))
 		fileInfo, fileInfoErr := p.API.UploadFile(fileData, channelID, a.FileName)
 		if fileInfoErr != nil {
-			p.API.LogError("Error uploading file with the name", a.FileName)
+			p.API.LogError("Error uploading file", "file_name", a.FileName)
 			return fileInfoErr
 		}
 		p.createPost(userID, channelID, fmt.Sprintf("Artifact - %s : %s", fileInfo.Name, *config.ServiceSettings.SiteURL+"/api/v4/files/"+fileInfo.Id))

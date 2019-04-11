@@ -14,7 +14,6 @@ const helpText = `* |/jenkins connect username API Token| - Connect your Matterm
 * |/jenkins build folder/jobname - Trigger a job inside a folder. Note the character '/'
 * |/jenkins build "folder name/job name with space" - Trigger a job inside a folder with space in job name or folder name. Note double quotes and the character '/'`
 
-const buildStartResponse = "Build started. Here's the build URL : "
 const jobNotSpecifiedResponse = "Please specify a job name to build."
 const jenkinsConnectedResponse = "Jenkins has been connected."
 
@@ -62,7 +61,7 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*mo
 			p.createEphemeralPost(args.UserId, args.ChannelId, "Validating Jenkins credentials...")
 			verify, verifyErr := p.verifyJenkinsCredentials(parameters[0], parameters[1])
 			if verifyErr != nil {
-				p.API.LogError("Error verifying Jenkins credentials", "user_id", args.UserId, "err", verifyErr.Error())
+				p.API.LogError("Error verifying Jenkins credentials", "user_id", args.UserId, "Err", verifyErr.Error())
 				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Error connecting to Jenkins."), nil
 			}
 
@@ -91,21 +90,25 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*mo
 			jobName := parameters[0]
 			buildInfo, buildErr := p.triggerJenkinsJob(args.UserId, args.ChannelId, jobName)
 			if buildErr != nil {
-				p.API.LogError("Error triggering build", jobName, "err", buildErr.Error())
-				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Error triggering build for the job "+jobName), nil
+				p.API.LogError("Error triggering build", "job_name", jobName, "err", buildErr.Error())
+				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, fmt.Sprintf("Error triggering build for the job '%s'.", jobName)), nil
 			}
 
-			commandResponse := p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, buildStartResponse+buildInfo.GetUrl())
+			commandResponse := p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, fmt.Sprintf("Build for the job '%s' has been started.\nHere's the build URL : %s. ", jobName, buildInfo.GetUrl()))
 			return commandResponse, nil
 		} else if len(parameters) > 1 {
-			jobName := parseJobName(parameters)
+			jobName, ok := parseJobName(parameters)
+			fmt.Println("jobname", jobName, ok)
+			if ok != true {
+				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Please check `/jenkins help` to find information on how to trigger a job."), nil
+			}
 			buildInfo, buildErr := p.triggerJenkinsJob(args.UserId, args.ChannelId, jobName)
 			if buildErr != nil {
-				p.API.LogError("Error triggering build", jobName, "err", buildErr.Error())
-				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Error triggering build for the job "+jobName), nil
+				p.API.LogError("Error triggering build", "job_name", jobName, "err", buildErr.Error())
+				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, fmt.Sprintf("Error triggering build for the job '%s'.", jobName)), nil
 			}
 
-			commandResponse := p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, buildStartResponse+buildInfo.GetUrl())
+			commandResponse := p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, fmt.Sprintf("Build for the job '%s' has been started.\nHere's the build URL : %s.", jobName, buildInfo.GetUrl()))
 			return commandResponse, nil
 		}
 	case "get-artifacts":
@@ -115,7 +118,7 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*mo
 			p.createEphemeralPost(args.UserId, args.ChannelId, fmt.Sprintf("Fetching build artifacts of '%s'...", parameters[0]))
 			err := p.fetchAndUploadArtifactsOfABuild(args.UserId, args.ChannelId, parameters[0])
 			if err != nil {
-				p.API.LogError("Error fetching artifacts", parameters[0], "err", err.Error())
+				p.API.LogError("Error fetching artifacts", "job_name", parameters[0], "err", err.Error())
 				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Error fetching artifacts."), nil
 			}
 		}
@@ -126,7 +129,7 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*mo
 			p.createEphemeralPost(args.UserId, args.ChannelId, fmt.Sprintf("Fetching test results of '%s'...", parameters[0]))
 			testReportMsg, err := p.fetchTestReportsLinkOfABuild(args.UserId, args.ChannelId, parameters[0])
 			if err != nil {
-				p.API.LogError("Error fetching test results", parameters[0], "err", err.Error())
+				p.API.LogError("Error fetching test results", "job_name", parameters[0], "err", err.Error())
 				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Error fetching test results."), nil
 			}
 			p.createEphemeralPost(args.UserId, args.ChannelId, testReportMsg)
