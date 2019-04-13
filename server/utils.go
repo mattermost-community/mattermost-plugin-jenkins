@@ -81,6 +81,9 @@ func decrypt(key []byte, text string) (string, error) {
 }
 
 func parseJobName(parameters []string) (string, bool) {
+	if len(parameters) == 1 {
+		return strings.Join(parameters, ""), true
+	}
 	tempString := strings.Join(parameters, " ")
 	regex, _ := regexp.Compile(`\"(.*?)\"`)
 	tempString = regex.FindString(tempString)

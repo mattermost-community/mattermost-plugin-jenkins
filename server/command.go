@@ -86,8 +86,11 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*mo
 	case "build":
 		if len(parameters) == 0 {
 			return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, jobNotSpecifiedResponse), nil
-		} else if len(parameters) == 1 {
-			jobName := parameters[0]
+		} else if len(parameters) >= 1 {
+			jobName, ok := parseJobName(parameters)
+			if !ok {
+				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Please check `/jenkins help` to find information on how to get test results of a build."), nil
+			}
 			buildInfo, buildErr := p.triggerJenkinsJob(args.UserId, args.ChannelId, jobName)
 			if buildErr != nil {
 				p.API.LogError("Error triggering build", "job_name", jobName, "err", buildErr.Error())
@@ -96,54 +99,26 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*mo
 
 			commandResponse := p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, fmt.Sprintf("Build for the job '%s' has been started.\nHere's the build URL : %s. ", jobName, buildInfo.GetUrl()))
 			return commandResponse, nil
-		} else if len(parameters) > 1 {
-			jobName, ok := parseJobName(parameters)
-			if !ok {
-				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Please check `/jenkins help` to find information on how to trigger a job."), nil
-			}
-			buildInfo, buildErr := p.triggerJenkinsJob(args.UserId, args.ChannelId, jobName)
-			if buildErr != nil {
-				p.API.LogError("Error triggering build", "job_name", jobName, "err", buildErr.Error())
-				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, fmt.Sprintf("Error triggering build for the job '%s'.", jobName)), nil
-			}
-
-			commandResponse := p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, fmt.Sprintf("Build for the job '%s' has been started.\nHere's the build URL : %s.", jobName, buildInfo.GetUrl()))
-			return commandResponse, nil
 		}
 	case "get-artifacts":
 		if len(parameters) == 0 {
 			return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, jobNotSpecifiedResponse), nil
-		} else if len(parameters) == 1 {
-			p.createEphemeralPost(args.UserId, args.ChannelId, fmt.Sprintf("Fetching build artifacts of '%s'...", parameters[0]))
-			err := p.fetchAndUploadArtifactsOfABuild(args.UserId, args.ChannelId, parameters[0])
-			if err != nil {
-				p.API.LogError("Error fetching artifacts", "job_name", parameters[0], "err", err.Error())
-				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Error fetching artifacts."), nil
-			}
-		} else if len(parameters) > 1 {
+		} else if len(parameters) >= 1 {
 			jobName, ok := parseJobName(parameters)
 			if !ok {
-				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Please check `/jenkins help` to find information on how to get build artifacts."), nil
+				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Please check `/jenkins help` to find information on how to get test results of a build."), nil
 			}
 			p.createEphemeralPost(args.UserId, args.ChannelId, fmt.Sprintf("Fetching build artifacts of '%s'...", jobName))
 			err := p.fetchAndUploadArtifactsOfABuild(args.UserId, args.ChannelId, jobName)
 			if err != nil {
-				p.API.LogError("Error fetching artifacts", "job_name", jobName, "err", err.Error())
+				p.API.LogError("Error fetching artifacts", "job_name", parameters[0], "err", err.Error())
 				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Error fetching artifacts."), nil
 			}
 		}
 	case "test-results":
 		if len(parameters) == 0 {
 			return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, jobNotSpecifiedResponse), nil
-		} else if len(parameters) == 1 {
-			p.createEphemeralPost(args.UserId, args.ChannelId, fmt.Sprintf("Fetching test results of '%s'...", parameters[0]))
-			testReportMsg, err := p.fetchTestReportsLinkOfABuild(args.UserId, args.ChannelId, parameters[0])
-			if err != nil {
-				p.API.LogError("Error fetching test results", "job_name", parameters[0], "err", err.Error())
-				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Error fetching test results."), nil
-			}
-			p.createEphemeralPost(args.UserId, args.ChannelId, testReportMsg)
-		} else if len(parameters) > 1 {
+		} else if len(parameters) >= 1 {
 			jobName, ok := parseJobName(parameters)
 			if !ok {
 				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Please check `/jenkins help` to find information on how to get test results of a build."), nil
@@ -151,10 +126,32 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*mo
 			p.createEphemeralPost(args.UserId, args.ChannelId, fmt.Sprintf("Fetching test results of '%s'...", jobName))
 			testReportMsg, err := p.fetchTestReportsLinkOfABuild(args.UserId, args.ChannelId, jobName)
 			if err != nil {
-				p.API.LogError("Error fetching test results", "job_name", jobName, "err", err.Error())
+				p.API.LogError("Error fetching test results", "job_name", parameters[0], "err", err.Error())
 				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Error fetching test results."), nil
 			}
 			p.createEphemeralPost(args.UserId, args.ChannelId, testReportMsg)
+		}
+	case "disable":
+		if len(parameters) == 0 {
+			return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Please specify a job to disable."), nil
+		} else if len(parameters) == 1 {
+			err := p.disableJob(args.UserId, parameters[0])
+			if err != nil {
+				p.API.LogError(err.Error())
+				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Error disabling the job."), nil
+			}
+			p.createEphemeralPost(args.UserId, args.ChannelId, fmt.Sprintf("Job '%s' has been disabled.", parameters[0]))
+		}
+	case "enable":
+		if len(parameters) == 0 {
+			return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Please specify a job to enable."), nil
+		} else if len(parameters) == 1 {
+			err := p.disableJob(args.UserId, parameters[0])
+			if err != nil {
+				p.API.LogError(err.Error())
+				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Error enabling the job."), nil
+			}
+			p.createEphemeralPost(args.UserId, args.ChannelId, fmt.Sprintf("Job '%s' has been enabled.", parameters[0]))
 		}
 	}
 	return &model.CommandResponse{}, nil

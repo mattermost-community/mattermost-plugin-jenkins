@@ -175,6 +175,25 @@ func (p *Plugin) getJenkinsClient(userID string) (*gojenkins.Jenkins, error) {
 	return jenkins, nil
 }
 
+func (p *Plugin) getJob(userID, jobName string) (*gojenkins.Job, error) {
+	jenkins, jenkinsErr := p.getJenkinsClient(userID)
+	if jenkinsErr != nil {
+		return nil, jenkinsErr
+	}
+
+	containsSlash := strings.Contains(jobName, "/")
+	if containsSlash {
+		jobName = strings.Replace(jobName, "/", "/job/", -1)
+	}
+
+	job, jobErr := jenkins.GetJob(jobName)
+	if jobErr != nil {
+		return nil, jobErr
+	}
+
+	return job, nil
+}
+
 func (p *Plugin) triggerJenkinsJob(userID, channelID, jobName string) (*gojenkins.Build, error) {
 	jenkins, jenkinsErr := p.getJenkinsClient(userID)
 	if jenkinsErr != nil {
@@ -184,7 +203,7 @@ func (p *Plugin) triggerJenkinsJob(userID, channelID, jobName string) (*gojenkin
 	if containsSlash {
 		jobName = strings.Replace(jobName, "/", "/job/", -1)
 	}
-	jobName = strings.TrimLeft(strings.TrimRight(jobName, `\"`), `\"`)
+	// jobName = strings.TrimLeft(strings.TrimRight(jobName, `\"`), `\"`)
 
 	buildQueueID, buildErr := jenkins.BuildJob(jobName)
 	if buildErr != nil {
@@ -196,7 +215,7 @@ func (p *Plugin) triggerJenkinsJob(userID, channelID, jobName string) (*gojenkin
 		return nil, errors.New("Error fetching job details from queue. " + taskErr.Error())
 	}
 
-	p.createEphemeralPost(userID, channelID, fmt.Sprintf("Build for the job '%s' has been triggered and is in queue.", jobName))
+	p.createEphemeralPost(userID, channelID, fmt.Sprintf("Build for the job '%s' has been triggered and is in queue.", strings.Replace(jobName, "/job", "/", -1)))
 
 	// Polling the job to see if the build has started
 	for {
@@ -218,28 +237,17 @@ func (p *Plugin) triggerJenkinsJob(userID, channelID, jobName string) (*gojenkin
 func (p *Plugin) fetchAndUploadArtifactsOfABuild(userID, channelID, jobName string) error {
 	config := p.API.GetConfig()
 
-	jenkins, jenkinsErr := p.getJenkinsClient(userID)
-	if jenkinsErr != nil {
-		p.API.LogError(jenkinsErr.Error())
-		return jenkinsErr
-	}
-
-	containsSlash := strings.Contains(jobName, "/")
-	if containsSlash {
-		jobName = strings.Replace(jobName, "/", "/job/", -1)
-	}
-
-	job, jobErr := jenkins.GetJob(jobName)
+	job, jobErr := p.getJob(userID, jobName)
 	if jobErr != nil {
-		p.API.LogError(jobErr.Error())
 		return jobErr
 	}
 
 	build, buildErr := job.GetLastSuccessfulBuild()
 	if buildErr != nil {
 		p.API.LogError(buildErr.Error())
-		return jenkinsErr
+		return buildErr
 	}
+
 	artifacts := build.GetArtifacts()
 	if len(artifacts) == 0 {
 		p.createEphemeralPost(userID, channelID, "No artifacts found in the last build.")
@@ -258,27 +266,15 @@ func (p *Plugin) fetchAndUploadArtifactsOfABuild(userID, channelID, jobName stri
 			p.API.LogError("Error uploading file", "file_name", a.FileName)
 			return fileInfoErr
 		}
-		p.createPost(userID, channelID, fmt.Sprintf("Artifact - %s : %s", fileInfo.Name, *config.ServiceSettings.SiteURL+"/api/v4/files/"+fileInfo.Id))
+		p.createPost(userID, channelID, fmt.Sprintf("Artifact '%s' : %s", fileInfo.Name, *config.ServiceSettings.SiteURL+"/api/v4/files/"+fileInfo.Id))
 	}
 	return nil
 }
 
 func (p *Plugin) fetchTestReportsLinkOfABuild(userID, channelID string, jobName string) (string, error) {
-	jenkins, jenkinsErr := p.getJenkinsClient(userID)
-	if jenkinsErr != nil {
-		p.API.LogError(jenkinsErr.Error())
-		return "", jenkinsErr
-	}
-
-	containsSlash := strings.Contains(jobName, "/")
-	if containsSlash {
-		jobName = strings.Replace(jobName, "/", "/job/", -1)
-	}
-
-	job, jobErr := jenkins.GetJob(jobName)
+	job, jobErr := p.getJob(userID, jobName)
 	if jobErr != nil {
-		p.API.LogError(jobErr.Error())
-		return "", jenkinsErr
+		return "", jobErr
 	}
 
 	lastBuild, buildErr := job.GetLastBuild()
@@ -292,13 +288,39 @@ func (p *Plugin) fetchTestReportsLinkOfABuild(userID, channelID string, jobName 
 	}
 
 	msg := ""
-
 	if hasTestResults {
 		testReportsURL := fmt.Sprintf("%s%d/testReport", job.Raw.URL, lastBuild.GetBuildNumber())
-		msg = "Test reports URL: " + testReportsURL
+		msg = fmt.Sprintf("Test reports for the last build: %s", testReportsURL)
 	} else {
-		msg = "Test reports for the job " + jobName + " doesn't exist"
+		msg = fmt.Sprintf("Last build of the job '%s' doesn't have test reports.", jobName)
 	}
 
 	return msg, nil
+}
+
+func (p *Plugin) disableJob(userID, jobName string) error {
+	job, jobErr := p.getJob(userID, jobName)
+	if jobErr != nil {
+		return jobErr
+	}
+
+	_, disableErr := job.Disable()
+
+	if disableErr != nil {
+		return disableErr
+	}
+	return nil
+}
+
+func (p *Plugin) enableJob(userID, jobName string) error {
+	job, jobErr := p.getJob(userID, jobName)
+	if jobErr != nil {
+		return jobErr
+	}
+	_, enableErr := job.Enable()
+
+	if enableErr != nil {
+		return enableErr
+	}
+	return nil
 }
