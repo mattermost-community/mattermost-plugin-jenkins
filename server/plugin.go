@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bndr/gojenkins"
 	"github.com/mattermost/mattermost-server/plugin"
+	"github.com/waseem18/gojenkins"
 )
 
 const (
@@ -159,7 +159,7 @@ func (p *Plugin) createPost(userID, channelID, message string) {
 	}
 }
 
-func (p *Plugin) createJenkinsClient(userID string) (*gojenkins.Jenkins, error) {
+func (p *Plugin) getJenkinsClient(userID string) (*gojenkins.Jenkins, error) {
 	pluginConfig := p.getConfiguration()
 	userInfo, err := p.getJenkinsUserInfo(userID)
 	if err != nil {
@@ -170,23 +170,21 @@ func (p *Plugin) createJenkinsClient(userID string) (*gojenkins.Jenkins, error) 
 	_, errJenkins := jenkins.Init()
 	if errJenkins != nil {
 		p.API.LogError("Error creating the jenkins client", "Err", errJenkins.Error())
-		return nil, errors.New("Error creating jenkins client " + err.Error())
+		return nil, errors.New(err.Error())
 	}
 	return jenkins, nil
 }
 
 func (p *Plugin) triggerJenkinsJob(userID, channelID, jobName string) (*gojenkins.Build, error) {
-	jenkins, jenkinsErr := p.createJenkinsClient(userID)
+	jenkins, jenkinsErr := p.getJenkinsClient(userID)
 	if jenkinsErr != nil {
 		return nil, jenkinsErr
 	}
-
-	jobName = strings.TrimLeft(strings.TrimRight(jobName, `\"`), `\"`)
-
 	containsSlash := strings.Contains(jobName, "/")
 	if containsSlash {
 		jobName = strings.Replace(jobName, "/", "/job/", -1)
 	}
+	jobName = strings.TrimLeft(strings.TrimRight(jobName, `\"`), `\"`)
 
 	buildQueueID, buildErr := jenkins.BuildJob(jobName)
 	if buildErr != nil {
@@ -205,7 +203,7 @@ func (p *Plugin) triggerJenkinsJob(userID, channelID, jobName string) (*gojenkin
 		if task.Raw.Executable.URL != "" {
 			break
 		}
-		time.Sleep(30 * time.Second)
+		time.Sleep(20 * time.Second)
 		task.Poll()
 	}
 
@@ -220,10 +218,15 @@ func (p *Plugin) triggerJenkinsJob(userID, channelID, jobName string) (*gojenkin
 func (p *Plugin) fetchAndUploadArtifactsOfABuild(userID, channelID, jobName string) error {
 	config := p.API.GetConfig()
 
-	jenkins, jenkinsErr := p.createJenkinsClient(userID)
+	jenkins, jenkinsErr := p.getJenkinsClient(userID)
 	if jenkinsErr != nil {
 		p.API.LogError(jenkinsErr.Error())
 		return jenkinsErr
+	}
+
+	containsSlash := strings.Contains(jobName, "/")
+	if containsSlash {
+		jobName = strings.Replace(jobName, "/", "/job/", -1)
 	}
 
 	job, jobErr := jenkins.GetJob(jobName)
@@ -232,7 +235,7 @@ func (p *Plugin) fetchAndUploadArtifactsOfABuild(userID, channelID, jobName stri
 		return jobErr
 	}
 
-	build, buildErr := job.GetLastBuild()
+	build, buildErr := job.GetLastSuccessfulBuild()
 	if buildErr != nil {
 		p.API.LogError(buildErr.Error())
 		return jenkinsErr
@@ -261,10 +264,15 @@ func (p *Plugin) fetchAndUploadArtifactsOfABuild(userID, channelID, jobName stri
 }
 
 func (p *Plugin) fetchTestReportsLinkOfABuild(userID, channelID string, jobName string) (string, error) {
-	jenkins, jenkinsErr := p.createJenkinsClient(userID)
+	jenkins, jenkinsErr := p.getJenkinsClient(userID)
 	if jenkinsErr != nil {
 		p.API.LogError(jenkinsErr.Error())
 		return "", jenkinsErr
+	}
+
+	containsSlash := strings.Contains(jobName, "/")
+	if containsSlash {
+		jobName = strings.Replace(jobName, "/", "/job/", -1)
 	}
 
 	job, jobErr := jenkins.GetJob(jobName)
@@ -278,34 +286,19 @@ func (p *Plugin) fetchTestReportsLinkOfABuild(userID, channelID string, jobName 
 		return "", buildErr
 	}
 
-	pluginConfig := p.getConfiguration()
-	userInfo, userInfoErr := p.getJenkinsUserInfo(userID)
-	if userInfoErr != nil {
-		return "", userInfoErr
+	hasTestResults, hasTestErr := lastBuild.HasTestResults()
+	if hasTestErr != nil {
+		return "", hasTestErr
 	}
 
-	u, err := url.Parse(pluginConfig.JenkinsURL)
-	if err != nil {
-		return "", err
+	msg := ""
+
+	if hasTestResults {
+		testReportsURL := fmt.Sprintf("%s%d/testReport", job.Raw.URL, lastBuild.GetBuildNumber())
+		msg = "Test reports URL: " + testReportsURL
+	} else {
+		msg = "Test reports for the job " + jobName + " doesn't exist"
 	}
 
-	scheme := u.Scheme
-
-	// TODO: Use gojenkins package if the requirement is to fetch the test results
-	// rather than replying to the slash command with the test reports link.
-	testReportInternalURL := fmt.Sprintf("%s://%s:%s@%s/job/%s/%d/testReport", scheme, userInfo.Username, userInfo.Token, u.Host, jobName, lastBuild.GetBuildNumber())
-	testReportAPIURL := testReportInternalURL + "/api/json"
-	response, respErr := http.Get(testReportAPIURL)
-	if respErr != nil {
-		return "", respErr
-	}
-
-	if response.StatusCode == 200 {
-		testReportsURL := fmt.Sprintf("%s/job/%s/%d/testReport", pluginConfig.JenkinsURL, job.GetName(), lastBuild.GetBuildNumber())
-		return "Test reports URL: " + testReportsURL, nil
-	} else if response.StatusCode == 404 {
-		return "Test reports for the job " + jobName + " doesn't exist", nil
-	}
-
-	return "", errors.New("Error fetching test results")
+	return msg, nil
 }

@@ -65,7 +65,7 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*mo
 				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Error connecting to Jenkins."), nil
 			}
 
-			if verify == false {
+			if !verify {
 				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Incorrect username or token"), nil
 			}
 
@@ -98,8 +98,7 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*mo
 			return commandResponse, nil
 		} else if len(parameters) > 1 {
 			jobName, ok := parseJobName(parameters)
-			fmt.Println("jobname", jobName, ok)
-			if ok != true {
+			if !ok {
 				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Please check `/jenkins help` to find information on how to trigger a job."), nil
 			}
 			buildInfo, buildErr := p.triggerJenkinsJob(args.UserId, args.ChannelId, jobName)
@@ -121,6 +120,17 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*mo
 				p.API.LogError("Error fetching artifacts", "job_name", parameters[0], "err", err.Error())
 				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Error fetching artifacts."), nil
 			}
+		} else if len(parameters) > 1 {
+			jobName, ok := parseJobName(parameters)
+			if !ok {
+				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Please check `/jenkins help` to find information on how to get build artifacts."), nil
+			}
+			p.createEphemeralPost(args.UserId, args.ChannelId, fmt.Sprintf("Fetching build artifacts of '%s'...", jobName))
+			err := p.fetchAndUploadArtifactsOfABuild(args.UserId, args.ChannelId, jobName)
+			if err != nil {
+				p.API.LogError("Error fetching artifacts", "job_name", jobName, "err", err.Error())
+				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Error fetching artifacts."), nil
+			}
 		}
 	case "test-results":
 		if len(parameters) == 0 {
@@ -130,6 +140,18 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*mo
 			testReportMsg, err := p.fetchTestReportsLinkOfABuild(args.UserId, args.ChannelId, parameters[0])
 			if err != nil {
 				p.API.LogError("Error fetching test results", "job_name", parameters[0], "err", err.Error())
+				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Error fetching test results."), nil
+			}
+			p.createEphemeralPost(args.UserId, args.ChannelId, testReportMsg)
+		} else if len(parameters) > 1 {
+			jobName, ok := parseJobName(parameters)
+			if !ok {
+				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Please check `/jenkins help` to find information on how to get test results of a build."), nil
+			}
+			p.createEphemeralPost(args.UserId, args.ChannelId, fmt.Sprintf("Fetching test results of '%s'...", jobName))
+			testReportMsg, err := p.fetchTestReportsLinkOfABuild(args.UserId, args.ChannelId, jobName)
+			if err != nil {
+				p.API.LogError("Error fetching test results", "job_name", jobName, "err", err.Error())
 				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Error fetching test results."), nil
 			}
 			p.createEphemeralPost(args.UserId, args.ChannelId, testReportMsg)
