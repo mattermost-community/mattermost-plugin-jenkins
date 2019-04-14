@@ -1,11 +1,23 @@
 # mattermost-plugin-jenkins
 A Mattermost plugin to interact with Jenkins
 
-# Plugin commands
-* `/jenkins connect <Jenkins username> <Jenkins API token>` - Use this command to connect your Mattermost account to Jenkins.
-Please [follow this link](https://stackoverflow.com/a/45466184/6852930) to find help regarding API token creation.
-* `/jenkins build jobName` - Use this command to trigger a job with the name jobName.
-* `/jenkins build jobName &param1=value1 &param2=value2` - Use this command to trigger a parameterized job. 
-* `/jenkins build "job name with space"` - Use double quotes to specify a job with spaces in it.
-* `/jenkins build folderName/jobName` - Use this command to specify to specify a job which resides inside folders.
-* `/jenkins build "folder name/ job name"` - Use double quotes when specifying a job with spaces.
+### Mattermost Jenkins Plugin - Slash Commands
+- `/jenkins connect username APIToken` - Connect your Mattermost account to Jenkins.
+
+- `/jenkins build jobname` - Trigger a job build.
+  
+  - If the job resides in a folder, specify the job as folder1/jobname. Note the slash character.
+  
+  - If the folder name or job name has spaces in it, wrap the jobname in double quotes as `"job name with space"` or `"folder with space/jobname"`.
+  
+  - Follow similar patterns for all commands which takes jobname as input.
+  
+- `/jenkins get-artifacts jobname` - Get artifacts of the last build of the given job.
+
+- `/jenkins test-results jobname` - Get test results of the last build of the given job.
+
+- `/jenkins disable jobname` - Disable a given job.
+
+- `/jenkins enable jobname` - Enanble a given job.
+
+- `/jenkins me` - Display the connected Jenkins account.
