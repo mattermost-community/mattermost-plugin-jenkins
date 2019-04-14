@@ -203,7 +203,6 @@ func (p *Plugin) triggerJenkinsJob(userID, channelID, jobName string) (*gojenkin
 	if containsSlash {
 		jobName = strings.Replace(jobName, "/", "/job/", -1)
 	}
-	// jobName = strings.TrimLeft(strings.TrimRight(jobName, `\"`), `\"`)
 
 	buildQueueID, buildErr := jenkins.BuildJob(jobName)
 	if buildErr != nil {

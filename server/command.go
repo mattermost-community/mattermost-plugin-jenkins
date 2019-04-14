@@ -8,12 +8,17 @@ import (
 	"github.com/mattermost/mattermost-server/plugin"
 )
 
-const helpText = `* |/jenkins connect username API Token| - Connect your Mattermost account to Jenkins
-* |/jenkins build jobname - Trigger a job build
-* |/jenkins build "jobname with space" - Trigger a job which has space in the job name. Note the double quotes
-* |/jenkins build folder/jobname - Trigger a job inside a folder. Note the character '/'
-* |/jenkins build "folder name/job name with space" - Trigger a job inside a folder with space in job name or folder name. Note double quotes and the character '/'`
-
+const helpText = `* |/jenkins connect username APIToken| - Connect your Mattermost account to Jenkins.
+* |/jenkins build jobname| - Trigger a build for the given job.
+  * If the job resides in a folder, specify the job as |folder1/jobname|. Note the slash character.
+  * If the folder name or job name has spaces in it, wrap the jobname in double quotes as |"job name with space"| or |"folder with space/jobname"|.
+  * Follow similar patterns for all commands which takes jobname as input.
+* |/jenkins get-artifacts jobname| - Get artifacts of the last build of the given job.
+* |/jenkins test-results jobname| - Get test results of the last build of the given job.
+* |/jenkins disable jobname| - Disable a given job.
+* |/jenkins enable jobname| - Enanble a given job.
+* |/jenkins me| - Display the connected Jenkins account.
+`
 const jobNotSpecifiedResponse = "Please specify a job name to build."
 const jenkinsConnectedResponse = "Jenkins has been connected."
 
@@ -23,7 +28,7 @@ func getCommand() *model.Command {
 		Description:      "A Mattermost plugin to interact with Jenkins",
 		DisplayName:      "Jenkins",
 		AutoComplete:     true,
-		AutoCompleteDesc: "Available commands: connect, build, help",
+		AutoCompleteDesc: "Available commands: connect, build, get-artifacts, test-results, disable, enable, me, help",
 		AutoCompleteHint: "[command]",
 	}
 }
@@ -153,6 +158,20 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*mo
 			}
 			p.createEphemeralPost(args.UserId, args.ChannelId, fmt.Sprintf("Job '%s' has been enabled.", parameters[0]))
 		}
+	case "help":
+		text := "###### Mattermost Jenkins Plugin - Slash Command Help\n" + strings.Replace(helpText, "|", "`", -1)
+		return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, text), nil
+	case "":
+		text := "###### Mattermost Jenkins Plugin - Slash Command Help\n" + strings.Replace(helpText, "|", "`", -1)
+		return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, text), nil
+	case "me":
+		userInfo, err := p.getJenkinsUserInfo(args.UserId)
+		if err != nil {
+			return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Encountered an error getting your Jenkins user information."), nil
+		}
+
+		text := fmt.Sprintf("You are connected to Jenkins as: %s", userInfo.Username)
+		return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, text), nil
 	}
 	return &model.CommandResponse{}, nil
 }
