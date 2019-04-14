@@ -6,11 +6,11 @@ A Mattermost plugin to interact with Jenkins
 
 - `/jenkins build jobname` - Trigger a job build.
   
-  - If the job resides in a folder, specify the job as folder1/jobname. Note the slash character.
+  - If the job resides in a folder, specify the job as `folder1/jobname`. Note the slash character.
   
   - If the folder name or job name has spaces in it, wrap the jobname in double quotes as `"job name with space"` or `"folder with space/jobname"`.
   
-  - Follow similar patterns for all commands which takes jobname as input.
+  - Follow similar pattern for all commands which takes jobname as input.
   
 - `/jenkins get-artifacts jobname` - Get artifacts of the last build of the given job.
 
