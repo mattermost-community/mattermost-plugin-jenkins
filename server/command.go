@@ -66,7 +66,7 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*mo
 			p.createEphemeralPost(args.UserId, args.ChannelId, "Validating Jenkins credentials...")
 			verify, verifyErr := p.verifyJenkinsCredentials(parameters[0], parameters[1])
 			if verifyErr != nil {
-				p.API.LogError("Error verifying Jenkins credentials", "user_id", args.UserId, "Err", verifyErr.Error())
+				p.API.LogError("Error connecting to Jenkins", "user_id", args.UserId, "Err", verifyErr.Error())
 				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Error connecting to Jenkins."), nil
 			}
 
@@ -94,7 +94,7 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*mo
 		} else if len(parameters) >= 1 {
 			jobName, ok := parseJobName(parameters)
 			if !ok {
-				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Please check `/jenkins help` to find information on how to get test results of a build."), nil
+				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Please check `/jenkins help` to find help on how to get test results of a build."), nil
 			}
 			buildInfo, buildErr := p.triggerJenkinsJob(args.UserId, args.ChannelId, jobName)
 			if buildErr != nil {
@@ -111,7 +111,7 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*mo
 		} else if len(parameters) >= 1 {
 			jobName, ok := parseJobName(parameters)
 			if !ok {
-				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Please check `/jenkins help` to find information on how to get test results of a build."), nil
+				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Please check `/jenkins help` to find help on how to get test results of a build."), nil
 			}
 			p.createEphemeralPost(args.UserId, args.ChannelId, fmt.Sprintf("Fetching build artifacts of '%s'...", jobName))
 			err := p.fetchAndUploadArtifactsOfABuild(args.UserId, args.ChannelId, jobName)
@@ -126,7 +126,7 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*mo
 		} else if len(parameters) >= 1 {
 			jobName, ok := parseJobName(parameters)
 			if !ok {
-				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Please check `/jenkins help` to find information on how to get test results of a build."), nil
+				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Please check `/jenkins help` to find help on how to get test results of a build."), nil
 			}
 			p.createEphemeralPost(args.UserId, args.ChannelId, fmt.Sprintf("Fetching test results of '%s'...", jobName))
 			testReportMsg, err := p.fetchTestReportsLinkOfABuild(args.UserId, args.ChannelId, jobName)

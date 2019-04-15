@@ -224,7 +224,6 @@ func (p *Plugin) triggerJenkinsJob(userID, channelID, jobName string) (*gojenkin
 		time.Sleep(20 * time.Second)
 		task.Poll()
 	}
-
 	buildInfo, buildErr := jenkins.GetBuild(jobName, task.Raw.Executable.Number)
 	if buildErr != nil {
 		return nil, errors.New("Error fetching the build details. " + buildErr.Error())
