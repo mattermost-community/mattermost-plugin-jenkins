@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"github.com/mattermost/mattermost-server/model"
 	"net/http"
@@ -12,6 +11,7 @@ import (
 	"time"
 
 	"github.com/mattermost/mattermost-server/plugin"
+	"github.com/pkg/errors"
 	"github.com/waseem18/gojenkins"
 )
 
@@ -98,7 +98,6 @@ func (p *Plugin) getJenkinsUserInfo(userID string) (*JenkinsUserInfo, error) {
 
 	unencryptedToken, err := decrypt([]byte(config.EncryptionKey), userInfo.Token)
 	if err != nil {
-		p.API.LogError(err.Error())
 		return nil, err
 	}
 
@@ -163,14 +162,13 @@ func (p *Plugin) getJenkinsClient(userID string) (*gojenkins.Jenkins, error) {
 	pluginConfig := p.getConfiguration()
 	userInfo, err := p.getJenkinsUserInfo(userID)
 	if err != nil {
-		return nil, errors.New("Error fetching Jenkins user info " + err.Error())
+		return nil, errors.Wrap(err, "Error fetching Jenkins user information")
 	}
 
 	jenkins := gojenkins.CreateJenkins(nil, pluginConfig.JenkinsURL, userInfo.Username, userInfo.Token)
 	_, errJenkins := jenkins.Init()
 	if errJenkins != nil {
-		p.API.LogError("Error creating the jenkins client", "Err", errJenkins.Error())
-		return nil, errors.New(err.Error())
+		return nil, errors.Wrap(errJenkins, "Error creating Jenkins client")
 	}
 	return jenkins, nil
 }
@@ -178,7 +176,7 @@ func (p *Plugin) getJenkinsClient(userID string) (*gojenkins.Jenkins, error) {
 func (p *Plugin) getJob(userID, jobName string) (*gojenkins.Job, error) {
 	jenkins, jenkinsErr := p.getJenkinsClient(userID)
 	if jenkinsErr != nil {
-		return nil, jenkinsErr
+		return nil, errors.Wrap(jenkinsErr, "Error creating Jenkins client")
 	}
 
 	containsSlash := strings.Contains(jobName, "/")
@@ -188,7 +186,7 @@ func (p *Plugin) getJob(userID, jobName string) (*gojenkins.Job, error) {
 
 	job, jobErr := jenkins.GetJob(jobName)
 	if jobErr != nil {
-		return nil, jobErr
+		return nil, errors.Wrap(jobErr, "Error fetching job")
 	}
 
 	return job, nil
@@ -197,7 +195,7 @@ func (p *Plugin) getJob(userID, jobName string) (*gojenkins.Job, error) {
 func (p *Plugin) triggerJenkinsJob(userID, channelID, jobName string) (*gojenkins.Build, error) {
 	jenkins, jenkinsErr := p.getJenkinsClient(userID)
 	if jenkinsErr != nil {
-		return nil, jenkinsErr
+		return nil, errors.Wrap(jenkinsErr, "Error creating Jenkins client")
 	}
 	containsSlash := strings.Contains(jobName, "/")
 	if containsSlash {
@@ -206,12 +204,12 @@ func (p *Plugin) triggerJenkinsJob(userID, channelID, jobName string) (*gojenkin
 
 	buildQueueID, buildErr := jenkins.BuildJob(jobName)
 	if buildErr != nil {
-		return nil, errors.New("Error building the job. " + buildErr.Error())
+		return nil, errors.Wrap(buildErr, "Error building job")
 	}
 
 	task, taskErr := jenkins.GetQueueItem(buildQueueID)
 	if taskErr != nil {
-		return nil, errors.New("Error fetching job details from queue. " + taskErr.Error())
+		return nil, taskErr
 	}
 
 	p.createEphemeralPost(userID, channelID, fmt.Sprintf("Build for the job '%s' has been triggered and is in queue.", strings.Replace(jobName, "/job", "/", -1)))
@@ -221,12 +219,12 @@ func (p *Plugin) triggerJenkinsJob(userID, channelID, jobName string) (*gojenkin
 		if task.Raw.Executable.URL != "" {
 			break
 		}
-		time.Sleep(20 * time.Second)
+		time.Sleep(pollingSleepTime * time.Second)
 		task.Poll()
 	}
 	buildInfo, buildErr := jenkins.GetBuild(jobName, task.Raw.Executable.Number)
 	if buildErr != nil {
-		return nil, errors.New("Error fetching the build details. " + buildErr.Error())
+		return nil, errors.Wrap(buildErr, "Error building job")
 	}
 
 	return buildInfo, nil
@@ -237,13 +235,12 @@ func (p *Plugin) fetchAndUploadArtifactsOfABuild(userID, channelID, jobName stri
 
 	job, jobErr := p.getJob(userID, jobName)
 	if jobErr != nil {
-		return jobErr
+		return errors.Wrap(jobErr, "Error fetching job")
 	}
 
 	build, buildErr := job.GetLastSuccessfulBuild()
 	if buildErr != nil {
-		p.API.LogError(buildErr.Error())
-		return buildErr
+		return errors.Wrap(buildErr, "Error fetching build information")
 	}
 
 	artifacts := build.GetArtifacts()
@@ -255,14 +252,12 @@ func (p *Plugin) fetchAndUploadArtifactsOfABuild(userID, channelID, jobName stri
 	for _, a := range artifacts {
 		fileData, fileDataErr := a.GetData()
 		if fileDataErr != nil {
-			p.API.LogError("Error uploading file", "file_name", a.FileName)
-			return fileDataErr
+			return errors.Wrap(fileDataErr, "Error fetching file data")
 		}
 		p.createEphemeralPost(userID, channelID, fmt.Sprintf("Uploading artifact '%s' ...", a.FileName))
 		fileInfo, fileInfoErr := p.API.UploadFile(fileData, channelID, a.FileName)
 		if fileInfoErr != nil {
-			p.API.LogError("Error uploading file", "file_name", a.FileName)
-			return fileInfoErr
+			return errors.Wrap(fileInfoErr, "Error uploading file")
 		}
 		p.createPost(userID, channelID, fmt.Sprintf("Artifact '%s' : %s", fileInfo.Name, *config.ServiceSettings.SiteURL+"/api/v4/files/"+fileInfo.Id))
 	}
@@ -272,17 +267,17 @@ func (p *Plugin) fetchAndUploadArtifactsOfABuild(userID, channelID, jobName stri
 func (p *Plugin) fetchTestReportsLinkOfABuild(userID, channelID string, jobName string) (string, error) {
 	job, jobErr := p.getJob(userID, jobName)
 	if jobErr != nil {
-		return "", jobErr
+		return "", errors.Wrap(jobErr, "Error fetching job")
 	}
 
 	lastBuild, buildErr := job.GetLastBuild()
 	if buildErr != nil {
-		return "", buildErr
+		return "", errors.Wrap(buildErr, "Error fetching build information")
 	}
 
 	hasTestResults, hasTestErr := lastBuild.HasTestResults()
 	if hasTestErr != nil {
-		return "", hasTestErr
+		return "", errors.Wrap(hasTestErr, "Error checking for test results")
 	}
 
 	msg := ""
@@ -299,13 +294,13 @@ func (p *Plugin) fetchTestReportsLinkOfABuild(userID, channelID string, jobName 
 func (p *Plugin) disableJob(userID, jobName string) error {
 	job, jobErr := p.getJob(userID, jobName)
 	if jobErr != nil {
-		return jobErr
+		return errors.Wrap(jobErr, "Error fetching job")
 	}
 
 	_, disableErr := job.Disable()
 
 	if disableErr != nil {
-		return disableErr
+		return errors.Wrap(disableErr, "Error disabling job")
 	}
 	return nil
 }
@@ -313,12 +308,12 @@ func (p *Plugin) disableJob(userID, jobName string) error {
 func (p *Plugin) enableJob(userID, jobName string) error {
 	job, jobErr := p.getJob(userID, jobName)
 	if jobErr != nil {
-		return jobErr
+		return errors.Wrap(jobErr, "Error fetching job")
 	}
 	_, enableErr := job.Enable()
 
 	if enableErr != nil {
-		return enableErr
+		return errors.Wrap(enableErr, "Error enabling job")
 	}
 	return nil
 }

@@ -13,6 +13,7 @@ const helpText = `* |/jenkins connect username APIToken| - Connect your Mattermo
   * If the job resides in a folder, specify the job as |folder1/jobname|. Note the slash character.
   * If the folder name or job name has spaces in it, wrap the jobname in double quotes as |"job name with space"| or |"folder with space/jobname"|.
   * Follow similar patterns for all commands which takes jobname as input.
+  * Use double quotes only when there are spaces in the job name or folder name.
 * |/jenkins get-artifacts jobname| - Get artifacts of the last build of the given job.
 * |/jenkins test-results jobname| - Get test results of the last build of the given job.
 * |/jenkins disable jobname| - Disable a given job.
@@ -21,6 +22,7 @@ const helpText = `* |/jenkins connect username APIToken| - Connect your Mattermo
 `
 const jobNotSpecifiedResponse = "Please specify a job name to build."
 const jenkinsConnectedResponse = "Jenkins has been connected."
+const pollingSleepTime = 20
 
 func getCommand() *model.Command {
 	return &model.Command{
@@ -142,7 +144,7 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*mo
 		} else if len(parameters) == 1 {
 			err := p.disableJob(args.UserId, parameters[0])
 			if err != nil {
-				p.API.LogError(err.Error())
+				p.API.LogError("Error disabling the job.", "job_name", parameters[0], "err", err.Error())
 				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Error disabling the job."), nil
 			}
 			p.createEphemeralPost(args.UserId, args.ChannelId, fmt.Sprintf("Job '%s' has been disabled.", parameters[0]))
@@ -153,7 +155,7 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*mo
 		} else if len(parameters) == 1 {
 			err := p.disableJob(args.UserId, parameters[0])
 			if err != nil {
-				p.API.LogError(err.Error())
+				p.API.LogError("Error enabling the job.", "job_name", parameters[0], "err", err.Error())
 				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Error enabling the job."), nil
 			}
 			p.createEphemeralPost(args.UserId, args.ChannelId, fmt.Sprintf("Job '%s' has been enabled.", parameters[0]))
@@ -167,6 +169,7 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*mo
 	case "me":
 		userInfo, err := p.getJenkinsUserInfo(args.UserId)
 		if err != nil {
+			p.API.LogError("Error fetching Jenkins user details", "err", err.Error())
 			return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Encountered an error getting your Jenkins user information."), nil
 		}
 
