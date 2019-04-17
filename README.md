@@ -40,6 +40,6 @@ A Mattermost plugin to interact with Jenkins
     1. Go to the System Console -> Plugins -> Jenkins and click "Regenerate" under "At Rest Encryption Key"
     2. Save the settings
 5. Enable the plugin
-    * Go to System Console -> Plugins -> Management and click "Enable" underneath the Jenkins plugin
+    1. Go to System Console -> Plugins -> Management and click "Enable" underneath the Jenkins plugin
 6. Test it out
-    * In Mattermost, run the slash command `/jenkins connect <Jenkins Username> <Jenkins API Token>`
+    1. In Mattermost, run the slash command `/jenkins connect <Jenkins Username> <Jenkins API Token>`
