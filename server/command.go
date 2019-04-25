@@ -96,16 +96,34 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*mo
 		} else if len(parameters) >= 1 {
 			jobName, ok := parseJobName(parameters)
 			if !ok {
-				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Please check `/jenkins help` to find help on how to get test results of a build."), nil
+				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Please check `/jenkins help` to find help on how to get trigger a job."), nil
 			}
-			buildInfo, buildErr := p.triggerJenkinsJob(args.UserId, args.ChannelId, jobName)
-			if buildErr != nil {
-				p.API.LogError("Error triggering build", "job_name", jobName, "err", buildErr.Error())
+
+			containsSlash := strings.Contains(jobName, "/")
+			if containsSlash {
+				jobName = strings.Replace(jobName, "/", "/job/", -1)
+			}
+
+			hasParemeters, paramErr := p.checkIfJobAcceptsParameters(args.UserId, jobName)
+			if paramErr != nil {
+				p.API.LogError("Error checking for parameters", "err", paramErr.Error())
 				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, fmt.Sprintf("Error triggering build for the job '%s'.", jobName)), nil
 			}
 
-			commandResponse := p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, fmt.Sprintf("Build for the job '%s' has been started.\nHere's the build URL : %s. ", jobName, buildInfo.GetUrl()))
-			return commandResponse, nil
+			if hasParemeters {
+				err := p.createDialogueForParameters(args.UserId, args.TriggerId, jobName, args.ChannelId)
+				if err != nil {
+					p.API.LogError("Error creating dialogue", "err", err.Error())
+					return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, fmt.Sprintf("Error triggering build for the job '%s'.", jobName)), nil
+				}
+			} else {
+				buildURL, err := p.triggerJenkinsJob(args.UserId, args.ChannelId, jobName, nil)
+				if err != nil {
+					p.API.LogError("Error triggering build", "job_name", jobName, "err", err.Error())
+					return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, fmt.Sprintf("Error triggering build for the job '%s'.", jobName)), nil
+				}
+				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, fmt.Sprintf("Build for the job '%s' has been started.\nHere's the build URL : %s", jobName, buildURL)), nil
+			}
 		}
 	case "get-artifacts":
 		if len(parameters) == 0 {

@@ -20,11 +20,10 @@ import (
 // If you add non-reference types to your configuration struct, be sure to rewrite Clone as a deep
 // copy appropriate for your types.
 type configuration struct {
-	JenkinsURL          string
-	JenkinsUsername     string
-	JenkinsUserAPIToken string
-	ProfileImageURL     string
-	EncryptionKey       string
+	JenkinsURL      string
+	Username        string
+	EncryptionKey   string
+	ProfileImageURL string
 }
 
 // Clone shallow copies the configuration. Your implementation may require a deep copy if

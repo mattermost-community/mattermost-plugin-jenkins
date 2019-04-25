@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/gorilla/mux"
 	"github.com/mattermost/mattermost-server/model"
 	"net/http"
 	"net/url"
@@ -23,6 +24,8 @@ const (
 type Plugin struct {
 	plugin.MattermostPlugin
 
+	router *mux.Router
+
 	// configurationLock synchronizes access to the configuration.
 	configurationLock sync.RWMutex
 
@@ -39,6 +42,7 @@ type JenkinsUserInfo struct {
 
 func (p *Plugin) OnActivate() error {
 	p.API.RegisterCommand(getCommand())
+	p.router = p.InitAPI()
 	configuration := p.getConfiguration()
 	if err := p.IsValid(configuration); err != nil {
 		return err
@@ -90,8 +94,12 @@ func (p *Plugin) getJenkinsUserInfo(userID string) (*JenkinsUserInfo, error) {
 
 	var userInfo JenkinsUserInfo
 
-	if infoBytes, err := p.API.KVGet(userID + jenkinsTokenKey); err != nil || infoBytes == nil {
-		return nil, err
+	infoBytes, infoErr := p.API.KVGet(userID + jenkinsTokenKey)
+
+	if infoErr != nil {
+		return nil, infoErr
+	} else if infoBytes == nil {
+		return nil, errors.New("User not found")
 	} else if err := json.Unmarshal(infoBytes, &userInfo); err != nil {
 		return nil, err
 	}
@@ -126,6 +134,7 @@ func (p *Plugin) verifyJenkinsCredentials(username, token string) (bool, error) 
 	return false, errors.New("Error verifying Jenkins credentials")
 }
 
+// createEphemeralPost creates an ephemeral post
 func (p *Plugin) createEphemeralPost(userID, channelID, message string) {
 	post := &model.Post{
 		UserId:    userID,
@@ -141,6 +150,7 @@ func (p *Plugin) createEphemeralPost(userID, channelID, message string) {
 	p.API.SendEphemeralPost(userID, post)
 }
 
+// createPost creates a non epehemeral post
 func (p *Plugin) createPost(userID, channelID, message string) {
 	post := &model.Post{
 		UserId:    userID,
@@ -158,6 +168,7 @@ func (p *Plugin) createPost(userID, channelID, message string) {
 	}
 }
 
+// getJenkinsClient creates a Jenkins client given user ID.
 func (p *Plugin) getJenkinsClient(userID string) (*gojenkins.Jenkins, error) {
 	pluginConfig := p.getConfiguration()
 	userInfo, err := p.getJenkinsUserInfo(userID)
@@ -168,11 +179,13 @@ func (p *Plugin) getJenkinsClient(userID string) (*gojenkins.Jenkins, error) {
 	jenkins := gojenkins.CreateJenkins(nil, pluginConfig.JenkinsURL, userInfo.Username, userInfo.Token)
 	_, errJenkins := jenkins.Init()
 	if errJenkins != nil {
-		return nil, errors.Wrap(errJenkins, "Error creating Jenkins client")
+		wrap := errors.Wrap(errJenkins, "Error creating Jenkins client")
+		return nil, wrap
 	}
 	return jenkins, nil
 }
 
+// getJob a Job object given the jobname.
 func (p *Plugin) getJob(userID, jobName string) (*gojenkins.Job, error) {
 	jenkins, jenkinsErr := p.getJenkinsClient(userID)
 	if jenkinsErr != nil {
@@ -192,29 +205,42 @@ func (p *Plugin) getJob(userID, jobName string) (*gojenkins.Job, error) {
 	return job, nil
 }
 
-func (p *Plugin) triggerJenkinsJob(userID, channelID, jobName string) (*gojenkins.Build, error) {
+// triggerJenkinsJob triggers a Jenkins build and polls the build in the queue to see if the build has started.
+func (p *Plugin) triggerJenkinsJob(userID, channelID, jobName string, parameters map[string]string) (string, error) {
 	jenkins, jenkinsErr := p.getJenkinsClient(userID)
 	if jenkinsErr != nil {
-		return nil, errors.Wrap(jenkinsErr, "Error creating Jenkins client")
+		return "", errors.Wrap(jenkinsErr, "Error creating Jenkins client")
 	}
-	containsSlash := strings.Contains(jobName, "/")
-	if containsSlash {
-		jobName = strings.Replace(jobName, "/", "/job/", -1)
-	}
-
-	buildQueueID, buildErr := jenkins.BuildJob(jobName)
+	buildQueueID, buildErr := p.buildJenkinsJob(jenkins, userID, channelID, jobName, parameters)
 	if buildErr != nil {
-		return nil, errors.Wrap(buildErr, "Error building job")
+		return "", buildErr
+	}
+	build, err := p.checkIfJobHasStarted(jenkins, jobName, buildQueueID)
+	if err != nil {
+		return "", err
+	}
+	return build.GetUrl(), nil
+}
+
+// buildJenkinsJob starts a given Jenkins build and
+// creates an epehemeral post once the build has been successfully triggered.
+func (p *Plugin) buildJenkinsJob(jenkins *gojenkins.Jenkins, userID, channelID, jobName string, parameters map[string]string) (int64, error) {
+	buildQueueID, buildErr := jenkins.BuildJob(jobName, parameters)
+	if buildErr != nil {
+		return -1, errors.Wrap(buildErr, "Error building job")
 	}
 
+	p.createEphemeralPost(userID, channelID, fmt.Sprintf("Build for the job '%s' has been triggered and is in queue.", strings.Replace(jobName, "/job", "/", -1)))
+	return buildQueueID, nil
+}
+
+// checkIfJobHasStarted polls the job to see if the build has started
+func (p *Plugin) checkIfJobHasStarted(jenkins *gojenkins.Jenkins, jobName string, buildQueueID int64) (*gojenkins.Build, error) {
 	task, taskErr := jenkins.GetQueueItem(buildQueueID)
 	if taskErr != nil {
 		return nil, taskErr
 	}
 
-	p.createEphemeralPost(userID, channelID, fmt.Sprintf("Build for the job '%s' has been triggered and is in queue.", strings.Replace(jobName, "/job", "/", -1)))
-
-	// Polling the job to see if the build has started
 	for {
 		if task.Raw.Executable.URL != "" {
 			break
@@ -315,5 +341,61 @@ func (p *Plugin) enableJob(userID, jobName string) error {
 	if enableErr != nil {
 		return errors.Wrap(enableErr, "Error enabling job")
 	}
+	return nil
+}
+
+func (p *Plugin) checkIfJobAcceptsParameters(userID, jobName string) (bool, error) {
+	job, jobErr := p.getJob(userID, jobName)
+	if jobErr != nil {
+		return false, errors.Wrap(jobErr, "Error fetching job")
+	}
+
+	jobParameters, err := job.GetParameters()
+	if err != nil {
+		return false, errors.Wrap(err, "Error fetching job parameters")
+	}
+
+	if len(jobParameters) > 0 {
+		return true, nil
+	}
+
+	return false, nil
+}
+
+// createDialogueForParameters creates an interactive dialogue for the user to input build parameters.
+func (p *Plugin) createDialogueForParameters(userID, triggerID, jobName, channelID string) error {
+	job, jobErr := p.getJob(userID, jobName)
+	if jobErr != nil {
+		return errors.Wrap(jobErr, "Error fetching job")
+	}
+
+	jobParameters, err := job.GetParameters()
+	if err != nil {
+		return errors.Wrap(err, "Error fetching job parameters")
+	}
+
+	var dialogueElementArr []model.DialogElement
+
+	for i := 0; i < len(jobParameters); i++ {
+		d := model.DialogElement{DisplayName: jobParameters[i].Name, Name: jobParameters[i].Name, Type: "text", SubType: "text"}
+		dialogueElementArr = append(dialogueElementArr, d)
+	}
+	siteURL := *p.API.GetConfig().ServiceSettings.SiteURL
+	encodedJobName, _ := url.Parse(jobName)
+	dialog := model.OpenDialogRequest{
+		TriggerId: triggerID,
+		URL:       fmt.Sprintf("%s/plugins/jenkins/triggerBuild/%s", siteURL, encodedJobName),
+		Dialog: model.Dialog{
+			Title:       fmt.Sprintf("Parameters of %s",jobName),
+			CallbackId:  userID,
+			SubmitLabel: "Trigger job",
+			Elements:    dialogueElementArr,
+		},
+	}
+	dialogErr := p.API.OpenInteractiveDialog(dialog)
+	if dialogErr != nil {
+		return errors.Wrap(dialogErr, "Error opening the interactive dialog")
+	}
+
 	return nil
 }
