@@ -22,7 +22,7 @@ const helpText = `* |/jenkins connect username APIToken| - Connect your Mattermo
 `
 const jobNotSpecifiedResponse = "Please specify a job name to build."
 const jenkinsConnectedResponse = "Jenkins has been connected."
-const pollingSleepTime = 20
+const pollingSleepTime = 10
 
 func getCommand() *model.Command {
 	return &model.Command{
@@ -193,6 +193,44 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*mo
 
 		text := fmt.Sprintf("You are connected to Jenkins as: %s", userInfo.Username)
 		return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, text), nil
+	case "get-log":
+		if len(parameters) == 0 {
+			return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Please specify a job name or jobname and build number."), nil
+		} else if len(parameters) == 1 {
+			jobName := parameters[0]
+			if err := p.fetchAndUploadBuildLog(args.UserId, args.ChannelId, jobName, ""); err != nil {
+				p.API.LogError("Error fetching logs", "job_name", jobName, "err", err.Error())
+				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Encountered an error fetching logs."), nil
+			}
+		} else if len(parameters) == 2 {
+			jobName := parameters[0]
+			buildNumber := parameters[1]
+			if err := p.fetchAndUploadBuildLog(args.UserId, args.ChannelId, jobName, buildNumber); err != nil {
+				p.API.LogError("Error fetching logs", "job_name", jobName, "err", err.Error())
+				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Encountered an error fetching logs."), nil
+			}
+		}
+	case "abort":
+		if len(parameters) == 0 {
+			return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Please specify a job name or jobname and build number."), nil
+		} else if len(parameters) == 1 {
+			jobName := parameters[0]
+			if err := p.abortBuild(args.UserId, jobName, ""); err != nil {
+				p.API.LogError("Error aborting Jenkins build", "job_name", jobName, "err", err.Error())
+				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Encountered an error in aborting the build."), nil
+			}
+
+			p.createEphemeralPost(args.UserId, args.ChannelId, fmt.Sprintf("Last build of the job %s has been aborted.", jobName))
+		} else if len(parameters) == 2 {
+			jobName := parameters[0]
+			buildNumber := parameters[1]
+			if err := p.abortBuild(args.UserId, jobName, buildNumber); err != nil {
+				p.API.LogError("Error aborting Jenkins build", "job_name", jobName, "err", err.Error())
+				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Encountered an error in aborting the build."), nil
+			}
+
+			p.createEphemeralPost(args.UserId, args.ChannelId, fmt.Sprintf("Build %s #%s has been aborted.", jobName, buildNumber))
+		}
 	}
 	return &model.CommandResponse{}, nil
 }

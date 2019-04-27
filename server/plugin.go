@@ -7,6 +7,7 @@ import (
 	"github.com/mattermost/mattermost-server/model"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -185,7 +186,7 @@ func (p *Plugin) getJenkinsClient(userID string) (*gojenkins.Jenkins, error) {
 	return jenkins, nil
 }
 
-// getJob a Job object given the jobname.
+// getJob returns a Job object given the jobname.
 func (p *Plugin) getJob(userID, jobName string) (*gojenkins.Job, error) {
 	jenkins, jenkinsErr := p.getJenkinsClient(userID)
 	if jenkinsErr != nil {
@@ -203,6 +204,31 @@ func (p *Plugin) getJob(userID, jobName string) (*gojenkins.Job, error) {
 	}
 
 	return job, nil
+}
+
+// getBuild returns the last build of the given job if buildID is specified.
+// Returns last build of the job if buildID is an empty string.
+func (p *Plugin) getBuild(jobName, userID, buildID string) (*gojenkins.Build, error) {
+	job, jobErr := p.getJob(userID, jobName)
+	if jobErr != nil {
+		return nil, jobErr
+	}
+
+	var build *gojenkins.Build
+	var buildErr error
+	if buildID == "" {
+		build, buildErr = job.GetLastBuild()
+		if buildErr != nil {
+			return nil, buildErr
+		}
+		return build, nil
+	}
+	buildIDInt, _ := strconv.ParseInt(buildID, 10, 64)
+	build, buildErr = job.GetBuild(buildIDInt)
+	if buildErr != nil {
+		return nil, buildErr
+	}
+	return build, nil
 }
 
 // triggerJenkinsJob triggers a Jenkins build and polls the build in the queue to see if the build has started.
@@ -386,7 +412,7 @@ func (p *Plugin) createDialogueForParameters(userID, triggerID, jobName, channel
 		TriggerId: triggerID,
 		URL:       fmt.Sprintf("%s/plugins/jenkins/triggerBuild/%s", siteURL, encodedJobName),
 		Dialog: model.Dialog{
-			Title:       fmt.Sprintf("Parameters of %s",jobName),
+			Title:       fmt.Sprintf("Parameters of %s", jobName),
 			CallbackId:  userID,
 			SubmitLabel: "Trigger job",
 			Elements:    dialogueElementArr,
@@ -398,4 +424,40 @@ func (p *Plugin) createDialogueForParameters(userID, triggerID, jobName, channel
 	}
 
 	return nil
+}
+
+// fetchAndUploadBuildLog fetches console log of the given job and build.
+// and uploads the console log as file to Mattermost server.
+func (p *Plugin) fetchAndUploadBuildLog(userID, channelID, jobName, buildID string) error {
+	config := p.API.GetConfig()
+	build, buildErr := p.getBuild(jobName, userID, buildID)
+	if buildErr != nil {
+		return buildErr
+	}
+	consoleOutput := build.GetConsoleOutput()
+	fileInfo, fileUploadErr := p.API.UploadFile([]byte(consoleOutput), channelID, jobName)
+	if fileUploadErr != nil {
+		return errors.Wrap(fileUploadErr, "Error uploading file")
+	}
+	p.createPost(userID, channelID, fmt.Sprintf("Build log for the job '%s' : %s", jobName, *config.ServiceSettings.SiteURL+"/api/v4/files/"+fileInfo.Id))
+	return nil
+}
+
+// abortBuild aborts a given build.
+// If the build ID is specified as an empty string, method fetches and aborts the last build of the job.
+func (p *Plugin) abortBuild(userID, jobName, buildID string) error {
+	build, buildErr := p.getBuild(jobName, userID, buildID)
+	if buildErr != nil {
+		return buildErr
+	}
+
+	isStopped, stopErr := build.Stop()
+	if stopErr != nil {
+		return stopErr
+	}
+
+	if isStopped {
+		return nil
+	}
+	return errors.New("error stopping the build")
 }
