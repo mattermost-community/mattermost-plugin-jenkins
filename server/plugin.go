@@ -153,15 +153,22 @@ func (p *Plugin) createEphemeralPost(userID, channelID, message string) {
 
 // createPost creates a non epehemeral post
 func (p *Plugin) createPost(userID, channelID, message string) {
+	userInfo, userInfoErr := p.getJenkinsUserInfo(userID)
+	if userInfoErr != nil {
+		p.API.LogError("Error fetching Jenkins user details", "err", userInfoErr.Error())
+		return
+	}
+	slackAttachment := generateSlackAttachment(message)
+	slackAttachment.Pretext = fmt.Sprintf("Initiated by Jenkins user: %s", userInfo.Username)
 	post := &model.Post{
 		UserId:    userID,
 		ChannelId: channelID,
-		Message:   message,
 		Type:      model.POST_DEFAULT,
 		Props: map[string]interface{}{
 			"from_webhook":      "true",
 			"override_username": jenkinsUsername,
 			"override_icon_url": p.getConfiguration().ProfileImageURL,
+			"attachments":       []*model.SlackAttachment{slackAttachment},
 		},
 	}
 	if _, err := p.API.CreatePost(post); err != nil {
@@ -219,33 +226,37 @@ func (p *Plugin) getBuild(jobName, userID, buildID string) (*gojenkins.Build, er
 	if buildID == "" {
 		build, buildErr = job.GetLastBuild()
 		if buildErr != nil {
-			return nil, buildErr
+			return nil, errors.Wrap(buildErr, "Error fetching last build")
 		}
 		return build, nil
 	}
 	buildIDInt, _ := strconv.ParseInt(buildID, 10, 64)
 	build, buildErr = job.GetBuild(buildIDInt)
 	if buildErr != nil {
-		return nil, buildErr
+		return nil, errors.Wrap(buildErr, "Error fetching the build")
 	}
 	return build, nil
 }
 
 // triggerJenkinsJob triggers a Jenkins build and polls the build in the queue to see if the build has started.
-func (p *Plugin) triggerJenkinsJob(userID, channelID, jobName string, parameters map[string]string) (string, error) {
+func (p *Plugin) triggerJenkinsJob(userID, channelID, jobName string, parameters map[string]string) (*gojenkins.Build, error) {
 	jenkins, jenkinsErr := p.getJenkinsClient(userID)
 	if jenkinsErr != nil {
-		return "", errors.Wrap(jenkinsErr, "Error creating Jenkins client")
+		return nil, errors.Wrap(jenkinsErr, "Error creating Jenkins client")
+	}
+	containsSlash := strings.Contains(jobName, "/")
+	if containsSlash {
+		jobName = strings.Replace(jobName, "/", "/job/", -1)
 	}
 	buildQueueID, buildErr := p.buildJenkinsJob(jenkins, userID, channelID, jobName, parameters)
 	if buildErr != nil {
-		return "", buildErr
+		return nil, buildErr
 	}
 	build, err := p.checkIfJobHasStarted(jenkins, jobName, buildQueueID)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return build.GetUrl(), nil
+	return build, nil
 }
 
 // buildJenkinsJob starts a given Jenkins build and
@@ -253,10 +264,16 @@ func (p *Plugin) triggerJenkinsJob(userID, channelID, jobName string, parameters
 func (p *Plugin) buildJenkinsJob(jenkins *gojenkins.Jenkins, userID, channelID, jobName string, parameters map[string]string) (int64, error) {
 	buildQueueID, buildErr := jenkins.BuildJob(jobName, parameters)
 	if buildErr != nil {
+		fmt.Println("build error max")
 		return -1, errors.Wrap(buildErr, "Error building job")
 	}
 
-	p.createEphemeralPost(userID, channelID, fmt.Sprintf("Build for the job '%s' has been triggered and is in queue.", strings.Replace(jobName, "/job", "/", -1)))
+	if buildQueueID == 0 {
+		p.createEphemeralPost(userID, channelID, "A build of this job is still in queue.\n Please trigger the job after the job's build queue is free.")
+		return -1, errors.Wrap(buildErr, "Error building the job as a previous build is still in queue.")
+	}
+
+	p.createPost(userID, channelID, fmt.Sprintf("Job '%s' has been triggered and is in queue.", strings.Replace(jobName, "/job/", "/", -1)))
 	return buildQueueID, nil
 }
 
@@ -276,30 +293,24 @@ func (p *Plugin) checkIfJobHasStarted(jenkins *gojenkins.Jenkins, jobName string
 	}
 	buildInfo, buildErr := jenkins.GetBuild(jobName, task.Raw.Executable.Number)
 	if buildErr != nil {
-		return nil, errors.Wrap(buildErr, "Error building job")
+		return nil, errors.Wrap(buildErr, "Error gettting job details")
 	}
 
 	return buildInfo, nil
 }
 
-func (p *Plugin) fetchAndUploadArtifactsOfABuild(userID, channelID, jobName string) error {
+func (p *Plugin) fetchAndUploadArtifactsOfABuild(userID, channelID, jobName, buildID string) error {
 	config := p.API.GetConfig()
-
-	job, jobErr := p.getJob(userID, jobName)
-	if jobErr != nil {
-		return errors.Wrap(jobErr, "Error fetching job")
-	}
-
-	build, buildErr := job.GetLastSuccessfulBuild()
+	build, buildErr := p.getBuild(jobName, userID, buildID)
 	if buildErr != nil {
-		return errors.Wrap(buildErr, "Error fetching build information")
+		return buildErr
 	}
 
 	artifacts := build.GetArtifacts()
 	if len(artifacts) == 0 {
-		p.createEphemeralPost(userID, channelID, "No artifacts found in the last build.")
+		p.createPost(userID, channelID, fmt.Sprintf("No artifacts found in the build #%d of the job '%s'", build.GetBuildNumber(), jobName))
 	} else {
-		p.createEphemeralPost(userID, channelID, fmt.Sprintf("%d Artifact(s) found", len(artifacts)))
+		p.createPost(userID, channelID, fmt.Sprintf("%d Artifact(s) found in the build #%d of the job '%s'", len(artifacts), build.GetBuildNumber(), jobName))
 	}
 	for _, a := range artifacts {
 		fileData, fileDataErr := a.GetData()
@@ -316,31 +327,31 @@ func (p *Plugin) fetchAndUploadArtifactsOfABuild(userID, channelID, jobName stri
 	return nil
 }
 
-func (p *Plugin) fetchTestReportsLinkOfABuild(userID, channelID string, jobName string) (string, error) {
-	job, jobErr := p.getJob(userID, jobName)
-	if jobErr != nil {
-		return "", errors.Wrap(jobErr, "Error fetching job")
-	}
-
-	lastBuild, buildErr := job.GetLastBuild()
+// getBuildTestResultsURL returns the test results URL of the given build if the build has test results
+// else returns empty string.
+func (p *Plugin) getBuildTestResultsURL(userID, channelID, jobName, buildID string) error {
+	build, buildErr := p.getBuild(jobName, userID, buildID)
 	if buildErr != nil {
-		return "", errors.Wrap(buildErr, "Error fetching build information")
+		return buildErr
 	}
 
-	hasTestResults, hasTestErr := lastBuild.HasTestResults()
+	hasTestResults, hasTestErr := build.HasTestResults()
 	if hasTestErr != nil {
-		return "", errors.Wrap(hasTestErr, "Error checking for test results")
+		return errors.Wrap(hasTestErr, "Error checking for test results")
 	}
-
 	msg := ""
 	if hasTestResults {
-		testReportsURL := fmt.Sprintf("%s%d/testReport", job.Raw.URL, lastBuild.GetBuildNumber())
-		msg = fmt.Sprintf("Test reports for the last build: %s", testReportsURL)
+		job, jobErr := p.getJob(userID, jobName)
+		if jobErr != nil {
+			return jobErr
+		}
+		testReportsURL := fmt.Sprintf("%s%d/testReport", job.Raw.URL, build.GetBuildNumber())
+		msg = fmt.Sprintf("Test reports for the build #%d of the job '%s': %s", build.GetBuildNumber(), jobName, testReportsURL)
 	} else {
-		msg = fmt.Sprintf("Last build of the job '%s' doesn't have test reports.", jobName)
+		msg = fmt.Sprintf("Build #%d of the job '%s' doesn't have test reports.", build.GetBuildNumber(), jobName)
 	}
-
-	return msg, nil
+	p.createPost(userID, channelID, msg)
+	return nil
 }
 
 func (p *Plugin) disableJob(userID, jobName string) error {
@@ -410,7 +421,7 @@ func (p *Plugin) createDialogueForParameters(userID, triggerID, jobName, channel
 	encodedJobName, _ := url.Parse(jobName)
 	dialog := model.OpenDialogRequest{
 		TriggerId: triggerID,
-		URL:       fmt.Sprintf("%s/plugins/jenkins/triggerBuild/%s", siteURL, encodedJobName),
+		URL:       fmt.Sprintf("%s/plugins/jenkins/triggerBuild?jobName=%s", siteURL, encodedJobName),
 		Dialog: model.Dialog{
 			Title:       fmt.Sprintf("Parameters of %s", jobName),
 			CallbackId:  userID,
@@ -439,7 +450,9 @@ func (p *Plugin) fetchAndUploadBuildLog(userID, channelID, jobName, buildID stri
 	if fileUploadErr != nil {
 		return errors.Wrap(fileUploadErr, "Error uploading file")
 	}
-	p.createPost(userID, channelID, fmt.Sprintf("Build log for the job '%s' : %s", jobName, *config.ServiceSettings.SiteURL+"/api/v4/files/"+fileInfo.Id))
+
+	msg := fmt.Sprintf("Console log of the build #%d of the job '%s' : %s", build.GetBuildNumber(), jobName, *config.ServiceSettings.SiteURL+"/api/v4/files/"+fileInfo.Id)
+	p.createPost(userID, channelID, msg)
 	return nil
 }
 
@@ -460,4 +473,16 @@ func (p *Plugin) abortBuild(userID, jobName, buildID string) error {
 		return nil
 	}
 	return errors.New("error stopping the build")
+}
+
+func (p *Plugin) deleteJob(userID, jobName string) error {
+	job, jobErr := p.getJob(userID, jobName)
+	if jobErr != nil {
+		return jobErr
+	}
+	_, err := job.Delete()
+	if err != nil {
+		return err
+	}
+	return nil
 }

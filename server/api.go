@@ -13,7 +13,7 @@ import (
 
 func (p *Plugin) InitAPI() *mux.Router {
 	r := mux.NewRouter()
-	r.HandleFunc("/triggerBuild/{jobName}", p.handleBuildTrigger).Methods("POST")
+	r.HandleFunc("/triggerBuild", p.handleBuildTrigger).Methods("POST")
 	return r
 }
 
@@ -29,8 +29,7 @@ func (p *Plugin) ServeHTTP(c *plugin.Context, w http.ResponseWriter, r *http.Req
 }
 
 func (p *Plugin) handleBuildTrigger(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	jobName := vars["jobName"]
+	jobName := r.FormValue("jobName")
 	decodedJobName, _ := url.QueryUnescape(jobName)
 
 	userID := r.Header.Get("Mattermost-User-ID")
@@ -53,9 +52,10 @@ func (p *Plugin) handleBuildTrigger(w http.ResponseWriter, r *http.Request) {
 		parameters[k] = v.(string)
 	}
 
-	buildURL, err := p.triggerJenkinsJob(userID, request.ChannelId, jobName, parameters)
+	build, err := p.triggerJenkinsJob(userID, request.ChannelId, jobName, parameters)
 	if err != nil {
+		p.API.LogError("Error triggering build", "job_name", jobName, "err", err.Error())
 		return
 	}
-	p.createEphemeralPost(userID, request.ChannelId, fmt.Sprintf("Build for the job '%s' has been started.\nHere's the build URL : %s", decodedJobName, buildURL))
+	p.createPost(userID, request.ChannelId, fmt.Sprintf("Job '%s' - #%d has been started\nBuild URL : %s", decodedJobName, build.GetBuildNumber(), build.GetUrl()))
 }
