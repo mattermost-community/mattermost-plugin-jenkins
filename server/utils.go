@@ -10,6 +10,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
+	"github.com/mattermost/mattermost-server/model"
 	"io"
 	"regexp"
 	"strings"
@@ -80,16 +81,27 @@ func decrypt(key []byte, text string) (string, error) {
 	return string(unpadMsg), nil
 }
 
-func parseJobName(parameters []string) (string, bool) {
+func parseBuildParameters(parameters []string) (string, string, bool) {
+	paramString := strings.Join(parameters, " ")
 	if len(parameters) == 1 {
-		return strings.Join(parameters, ""), true
+		if strings.HasPrefix(paramString, "\"") && strings.HasSuffix(paramString, "\"") {
+			tempString := strings.TrimLeft(strings.TrimRight(paramString, `\"`), `\"`)
+			return tempString, "", true
+		}
+		return paramString, "", true
 	}
-	tempString := strings.Join(parameters, " ")
-	regex, _ := regexp.Compile(`\"(.*?)\"`)
-	tempString = regex.FindString(tempString)
-	if tempString == "" {
-		return "", false
+	regex, _ := regexp.Compile(`("[^"]*"|[^"\s]+)\s*(\w*)`)
+	submatches := regex.FindAllStringSubmatch(paramString, -1)
+	if len(submatches) == 0 || len(submatches) > 1 {
+		return "", "", false
 	}
-	tempString = strings.TrimLeft(strings.TrimRight(tempString, `\"`), `\"`)
-	return tempString, true
+	return strings.TrimLeft(strings.TrimRight(submatches[0][1], `\"`), `\"`), submatches[0][2], true
+}
+
+func generateSlackAttachment(text string) *model.SlackAttachment {
+	slackAttachment := &model.SlackAttachment{
+		Text:  text,
+		Color: "#7FC1EE",
+	}
+	return slackAttachment
 }
