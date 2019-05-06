@@ -14,6 +14,7 @@ import (
 func (p *Plugin) InitAPI() *mux.Router {
 	r := mux.NewRouter()
 	r.HandleFunc("/triggerBuild", p.handleBuildTrigger).Methods("POST")
+	r.HandleFunc("/createJob", p.handleJobCreation).Methods("POST")
 	return r
 }
 
@@ -58,4 +59,27 @@ func (p *Plugin) handleBuildTrigger(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p.createPost(userID, request.ChannelId, fmt.Sprintf("Job '%s' - #%d has been started\nBuild URL : %s", decodedJobName, build.GetBuildNumber(), build.GetUrl()))
+}
+
+func (p *Plugin) handleJobCreation(w http.ResponseWriter, r *http.Request) {
+	userID := r.Header.Get("Mattermost-User-ID")
+	if userID == "" {
+		http.Error(w, "Not authorized", http.StatusUnauthorized)
+		return
+	}
+
+	body, _ := ioutil.ReadAll(r.Body)
+	bodyString := string(body)
+
+	request := model.SubmitDialogRequestFromJson(strings.NewReader(bodyString))
+	if request == nil {
+		p.API.LogError("failed to decode request")
+		return
+	}
+
+	jobInputs := make(map[string]string)
+	for k, v := range request.Submission {
+		jobInputs[k] = v.(string)
+	}
+	p.sendJobCreateRequest(userID, request.ChannelId, jobInputs)
 }
