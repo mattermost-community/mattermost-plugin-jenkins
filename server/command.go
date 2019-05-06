@@ -9,6 +9,8 @@ import (
 )
 
 const helpText = `* |/jenkins connect username APIToken| - Connect your Mattermost account to Jenkins.
+* |/jenkins disconnect| - Disconnect your Mattermost account with Jenkins.
+* |/jenkins me| - Display the connected Jenkins account.
 * |/jenkins build jobname| - Trigger a build for the given job.
   * If the job resides in a folder, specify the job as |folder1/jobname|. Note the slash character.
   * If the folder name or job name has spaces in it, wrap the jobname in double quotes as |"job name with space"| or |"folder with space/jobname"|.
@@ -16,9 +18,14 @@ const helpText = `* |/jenkins connect username APIToken| - Connect your Mattermo
   * Use double quotes only when there are spaces in the job name or folder name.
 * |/jenkins get-artifacts jobname| - Get artifacts of the last build of the given job.
 * |/jenkins test-results jobname| - Get test results of the last build of the given job.
+* |/jenkins get-log jobname <build number>| - Get build log of a given job. Build number is optional.
+  * If build number is not specified, the command fetches the log of the last build.
+* |/jenkins abort jobname <build number>| - Abort the build of a given job.
+  * If build number is not specified, the command aborts the last running build.
 * |/jenkins disable jobname| - Disable a given job.
 * |/jenkins enable jobname| - Enanble a given job.
-* |/jenkins me| - Display the connected Jenkins account.
+* |/jenkins delete jobname| - Deletes a given job.
+* |/jenkins restart| - Safe restarts the Jenkins server.
 `
 const jobNotSpecifiedResponse = "Please specify a job name to build."
 const pollingSleepTime = 10
@@ -29,7 +36,7 @@ func getCommand() *model.Command {
 		Description:      "A Mattermost plugin to interact with Jenkins",
 		DisplayName:      "Jenkins",
 		AutoComplete:     true,
-		AutoCompleteDesc: "Available commands: connect, build, get-artifacts, test-results, disable, enable, me, help",
+		AutoCompleteDesc: "Available commands: connect, disconnect, me, build, get-artifacts, test-results, get-log, abort, disable, enable, delete, help",
 		AutoCompleteHint: "[command]",
 	}
 }
@@ -105,7 +112,7 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*mo
 			}
 
 			if hasParameters {
-				err := p.createDialogueForParameters(args.UserId, args.TriggerId, jobName, args.ChannelId)
+				err := p.createDialogForParameters(args.UserId, args.TriggerId, jobName, args.ChannelId)
 				if err != nil {
 					p.API.LogError("Error creating dialogue", "err", err.Error())
 					return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, fmt.Sprintf("Error triggering build for the job '%s'.", jobName)), nil
@@ -269,6 +276,31 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*mo
 			}
 
 			p.createPost(args.UserId, args.ChannelId, fmt.Sprintf("Job '%s' has been deleted.", jobName))
+		}
+	case "restart":
+		if len(parameters) != 0 {
+			return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Please check `/jenkins help` to find help on how to safe restart Jenkins."), nil
+		}
+		if err := p.safeRestart(args.UserId); err != nil {
+			p.API.LogError("Error while safe restarting the Jenkins server", err.Error())
+			return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Encountered an error while safe restarting the Jenkins server."), nil
+		}
+		p.createPost(args.UserId, args.ChannelId, "Safe restart of Jenkins server has been triggered.")
+	case "plugins":
+		if len(parameters) != 0 {
+			return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Please check `/jenkins help` to find help on how to get a list of plugins."), nil
+		}
+		if err := p.getListOfInstalledPlugins(args.UserId, args.ChannelId); err != nil {
+			p.API.LogError("Error while fetching list of installed plugins", err.Error())
+			return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Encountered an error while fetching list of installed plugins"), nil
+		}
+	case "createjob":
+		if len(parameters) != 0 {
+			return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Please check `/jenkins help` to find help on how to create a job."), nil
+		}
+		if err := p.createJob(args.UserId, args.ChannelId, args.TriggerId); err != nil {
+			p.API.LogError("Error while creating job", err.Error())
+			return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Encountered an error while creating job"), nil
 		}
 	}
 	return &model.CommandResponse{}, nil

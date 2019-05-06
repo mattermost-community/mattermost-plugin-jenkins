@@ -260,11 +260,10 @@ func (p *Plugin) triggerJenkinsJob(userID, channelID, jobName string, parameters
 }
 
 // buildJenkinsJob starts a given Jenkins build and
-// creates an epehemeral post once the build has been successfully triggered.
+// creates an ephemeral post once the build has been successfully triggered.
 func (p *Plugin) buildJenkinsJob(jenkins *gojenkins.Jenkins, userID, channelID, jobName string, parameters map[string]string) (int64, error) {
 	buildQueueID, buildErr := jenkins.BuildJob(jobName, parameters)
 	if buildErr != nil {
-		fmt.Println("build error max")
 		return -1, errors.Wrap(buildErr, "Error building job")
 	}
 
@@ -299,6 +298,9 @@ func (p *Plugin) checkIfJobHasStarted(jenkins *gojenkins.Jenkins, jobName string
 	return buildInfo, nil
 }
 
+// fetchAndUploadArtifactsOfABuild checks if the specified job and build has artifacts and
+// uploads them to MM server if artifacts are present.
+// If build number is not specified, the method checks the last build of the job for artifacts.
 func (p *Plugin) fetchAndUploadArtifactsOfABuild(userID, channelID, jobName, buildID string) error {
 	config := p.API.GetConfig()
 	build, buildErr := p.getBuild(jobName, userID, buildID)
@@ -327,8 +329,9 @@ func (p *Plugin) fetchAndUploadArtifactsOfABuild(userID, channelID, jobName, bui
 	return nil
 }
 
-// getBuildTestResultsURL returns the test results URL of the given build if the build has test results
-// else returns empty string.
+// getBuildTestResultsURL checks if the specified job and build has test results and
+// creates a post with the test results URL if the  build has test results.
+// If build number is not specified, the method checks the last build of the job for test results.
 func (p *Plugin) getBuildTestResultsURL(userID, channelID, jobName, buildID string) error {
 	build, buildErr := p.getBuild(jobName, userID, buildID)
 	if buildErr != nil {
@@ -354,6 +357,8 @@ func (p *Plugin) getBuildTestResultsURL(userID, channelID, jobName, buildID stri
 	return nil
 }
 
+// disableJob disables a given job.
+// Returns an error if the operation is not successful.
 func (p *Plugin) disableJob(userID, jobName string) error {
 	job, jobErr := p.getJob(userID, jobName)
 	if jobErr != nil {
@@ -368,6 +373,8 @@ func (p *Plugin) disableJob(userID, jobName string) error {
 	return nil
 }
 
+// enableJob enables a given job.
+// Returns an error if the operation is not successful.
 func (p *Plugin) enableJob(userID, jobName string) error {
 	job, jobErr := p.getJob(userID, jobName)
 	if jobErr != nil {
@@ -381,6 +388,7 @@ func (p *Plugin) enableJob(userID, jobName string) error {
 	return nil
 }
 
+// checkIfJobAcceptsParameters checks if a given job accepts parameters to be able to be triggered.
 func (p *Plugin) checkIfJobAcceptsParameters(userID, jobName string) (bool, error) {
 	job, jobErr := p.getJob(userID, jobName)
 	if jobErr != nil {
@@ -399,8 +407,8 @@ func (p *Plugin) checkIfJobAcceptsParameters(userID, jobName string) (bool, erro
 	return false, nil
 }
 
-// createDialogueForParameters creates an interactive dialogue for the user to input build parameters.
-func (p *Plugin) createDialogueForParameters(userID, triggerID, jobName, channelID string) error {
+// createDialogForParameters creates an interactive dialog for the user to input build parameters.
+func (p *Plugin) createDialogForParameters(userID, triggerID, jobName, channelID string) error {
 	job, jobErr := p.getJob(userID, jobName)
 	if jobErr != nil {
 		return errors.Wrap(jobErr, "Error fetching job")
@@ -475,6 +483,8 @@ func (p *Plugin) abortBuild(userID, jobName, buildID string) error {
 	return errors.New("error stopping the build")
 }
 
+// deleteJob deletes a given job.
+// Returns an error if the operation fails.
 func (p *Plugin) deleteJob(userID, jobName string) error {
 	job, jobErr := p.getJob(userID, jobName)
 	if jobErr != nil {
@@ -484,5 +494,129 @@ func (p *Plugin) deleteJob(userID, jobName string) error {
 	if err != nil {
 		return err
 	}
+	return nil
+}
+
+// safeRestart safe restarts the Jenkins server.
+// Returns an error if the operation fails.
+func (p *Plugin) safeRestart(userID string) error {
+	jenkins, jenkinsErr := p.getJenkinsClient(userID)
+	if jenkinsErr != nil {
+		return errors.Wrap(jenkinsErr, "Error creating Jenkins client")
+	}
+	if err := jenkins.SafeRestart(); err != nil {
+		return err
+	}
+	return nil
+}
+
+// getListOfInstalledPlugins fetches the list of installed plugins on the Jenkins server.
+func (p *Plugin) getListOfInstalledPlugins(userID, channelID string) error {
+	jenkins, jenkinsErr := p.getJenkinsClient(userID)
+	if jenkinsErr != nil {
+		return errors.Wrap(jenkinsErr, "Error creating Jenkins client")
+	}
+	plugins, pluginsErr := jenkins.GetPlugins(1)
+	if pluginsErr != nil {
+		return pluginsErr
+	}
+	msg := ""
+	for k, v := range plugins.Raw.Plugins {
+		status := "Disabled"
+		if v.Enabled {
+			status = "Enabled"
+		}
+		msg = msg + fmt.Sprintf("%d. %s - %s - %s\n", k+1, v.LongName, v.Version, status)
+	}
+	p.createPost(userID, channelID, msg)
+	return nil
+}
+
+func (p *Plugin) createJob(userID, channelID, triggerID string) error {
+	if err := p.createDialogForJobCreation(userID, channelID, triggerID); err != nil {
+		return err
+	}
+	return nil
+}
+
+// createDialogForJobCreation creates an interactive dialog
+// for the user to input job name and the content of config.xml
+func (p *Plugin) createDialogForJobCreation(userID, channelID, triggerID string) error {
+	config := p.API.GetConfig()
+	dialog := model.OpenDialogRequest{
+		TriggerId: triggerID,
+		URL:       fmt.Sprintf("%s/plugins/jenkins/createJob", *config.ServiceSettings.SiteURL),
+		Dialog: model.Dialog{
+			Title:       fmt.Sprintf("Please paste the contents of config.xml file here"),
+			CallbackId:  userID,
+			SubmitLabel: "Create job",
+			Elements: []model.DialogElement{{
+				DisplayName: "Job name",
+				Name:        "JobName",
+				Type:        "text",
+				SubType:     "text",
+				HelpText:    "Please use double quotes if the job name has spaces in it.",
+				MaxLength:   5000, //Should revist this?
+			}, {
+				DisplayName: "Config.xml",
+				Name:        "ConfigXml",
+				Type:        "textarea",
+				SubType:     "text",
+			},
+			},
+		},
+	}
+	dialogErr := p.API.OpenInteractiveDialog(dialog)
+	if dialogErr != nil {
+		return errors.Wrap(dialogErr, "Error opening the interactive dialog")
+	}
+	return nil
+}
+
+func (p *Plugin) sendJobCreateRequest(userID, channelID string, parameters map[string]string) error {
+	jobName := parameters["JobName"]
+	configXML := parameters["ConfigXml"]
+
+	jenkins, jenkinsErr := p.getJenkinsClient(userID)
+	if jenkinsErr != nil {
+		return errors.Wrap(jenkinsErr, "Error creating Jenkins client")
+	}
+
+	jobName, extraParam, ok := parseBuildParameters(strings.Split(jobName, " "))
+	if !ok || extraParam != "" {
+		p.createEphemeralPost(userID, channelID, "Please check `/jenkins help` to find help on how to create a job.")
+	}
+	if strings.Contains(jobName, "/") {
+		splitString := strings.Split(jobName, "/")
+		jobName = splitString[len(splitString)-1]
+		folderList := splitString[:len(splitString)-1]
+		parentFolders := []string{}
+		for _, v := range folderList {
+			_, fErr := jenkins.GetFolder(v, parentFolders...)
+			if fErr != nil {
+				_, err := jenkins.CreateFolder(v, parentFolders...)
+				if err != nil {
+					p.createEphemeralPost(userID, channelID, "Error creating job")
+					return err
+				}
+			}
+			parentFolders = append(parentFolders, v)
+		}
+
+		job, jobErr := jenkins.CreateJobInFolder(configXML, jobName, folderList...)
+		if jobErr != nil {
+			p.createEphemeralPost(userID, channelID, "Error creating job")
+			return jobErr
+		}
+		p.createPost(userID, channelID, fmt.Sprintf("Job '%s' has been created.", job.GetName()))
+		return nil
+	}
+	job, err := jenkins.CreateJob(configXML, jobName)
+	if err != nil {
+		p.createEphemeralPost(userID, channelID, "Error creating job")
+		return err
+	}
+	p.createPost(userID, channelID, fmt.Sprintf("Job '%s' has been created", job.GetName()))
+
 	return nil
 }

@@ -81,6 +81,15 @@ func decrypt(key []byte, text string) (string, error) {
 	return string(unpadMsg), nil
 }
 
+// parseBuildParameters checks if the parameters are valid and returns three values.
+// The first return value is considered as job name and the second value is considered as build number.
+// Examples of valid parameters as per the regex:
+// 1. jobname OR folder/jobname
+// 2. jobname 22 OR folder/jobname 22
+// 3. "jobname" OR "folder/jobname"
+// 4. "jobname" 22 OR "folder/jobname" 22
+// 5. "job name with space" OR "folder/job name with space" OR "folder with space/job name with space"
+// 6. "job name with space" 22 OR "folder with space/job name with space" 22
 func parseBuildParameters(parameters []string) (string, string, bool) {
 	paramString := strings.Join(parameters, " ")
 	if len(parameters) == 1 {
