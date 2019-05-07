@@ -556,7 +556,7 @@ func (p *Plugin) createDialogForJobCreation(userID, channelID, triggerID string)
 				Type:        "text",
 				SubType:     "text",
 				HelpText:    "Please use double quotes if the job name has spaces in it.",
-				MaxLength:   5000, //Should revist this?
+				MaxLength:   10000, //Should revist this?
 			}, {
 				DisplayName: "Config.xml",
 				Name:        "ConfigXml",
@@ -573,6 +573,8 @@ func (p *Plugin) createDialogForJobCreation(userID, channelID, triggerID string)
 	return nil
 }
 
+// sendJobCreateRequest first parses the job name to analyse the folder and job names to be created
+// and triggers a job creation request using the contents of config.xml pasted in the dialog.
 func (p *Plugin) sendJobCreateRequest(userID, channelID string, parameters map[string]string) error {
 	jobName := parameters["JobName"]
 	configXML := parameters["ConfigXml"]
@@ -585,6 +587,7 @@ func (p *Plugin) sendJobCreateRequest(userID, channelID string, parameters map[s
 	jobName, extraParam, ok := parseBuildParameters(strings.Split(jobName, " "))
 	if !ok || extraParam != "" {
 		p.createEphemeralPost(userID, channelID, "Please check `/jenkins help` to find help on how to create a job.")
+		return errors.New("error while creating the job")
 	}
 	if strings.Contains(jobName, "/") {
 		splitString := strings.Split(jobName, "/")
@@ -596,7 +599,7 @@ func (p *Plugin) sendJobCreateRequest(userID, channelID string, parameters map[s
 			if fErr != nil {
 				_, err := jenkins.CreateFolder(v, parentFolders...)
 				if err != nil {
-					p.createEphemeralPost(userID, channelID, "Error creating job")
+					p.createEphemeralPost(userID, channelID, "Error creating the job.")
 					return err
 				}
 			}
@@ -605,7 +608,7 @@ func (p *Plugin) sendJobCreateRequest(userID, channelID string, parameters map[s
 
 		job, jobErr := jenkins.CreateJobInFolder(configXML, jobName, folderList...)
 		if jobErr != nil {
-			p.createEphemeralPost(userID, channelID, "Error creating job")
+			p.createEphemeralPost(userID, channelID, "Error creating the job.")
 			return jobErr
 		}
 		p.createPost(userID, channelID, fmt.Sprintf("Job '%s' has been created.", job.GetName()))
@@ -613,7 +616,7 @@ func (p *Plugin) sendJobCreateRequest(userID, channelID string, parameters map[s
 	}
 	job, err := jenkins.CreateJob(configXML, jobName)
 	if err != nil {
-		p.createEphemeralPost(userID, channelID, "Error creating job")
+		p.createEphemeralPost(userID, channelID, "Error creating the job.")
 		return err
 	}
 	p.createPost(userID, channelID, fmt.Sprintf("Job '%s' has been created", job.GetName()))
