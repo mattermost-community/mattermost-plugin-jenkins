@@ -25,7 +25,7 @@ const helpText = `* |/jenkins connect username APIToken| - Connect your Mattermo
 * |/jenkins disable jobname| - Disable a given job.
 * |/jenkins enable jobname| - Enanble a given job.
 * |/jenkins delete jobname| - Deletes a given job.
-* |/jenkins restart| - Safe restarts the Jenkins server.
+* |/jenkins safe-restart| - Safe restarts the Jenkins server.
 * |/jenkins plugins| - Get a list of installed plugins on the Jenkins server.
 * |/jenkins createjob| - Create a job using config.xml.
 `
@@ -38,7 +38,7 @@ func getCommand() *model.Command {
 		Description:      "A Mattermost plugin to interact with Jenkins",
 		DisplayName:      "Jenkins",
 		AutoComplete:     true,
-		AutoCompleteDesc: "Available commands: connect, disconnect, me, build, get-artifacts, test-results, get-log, abort, disable, enable, delete, restart, plugins, createjob, help",
+		AutoCompleteDesc: "Available commands: connect, disconnect, me, build, get-artifacts, test-results, get-log, abort, disable, enable, delete, safe-restart, plugins, createjob, help",
 		AutoCompleteHint: "[command]",
 	}
 }
@@ -279,7 +279,7 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*mo
 
 			p.createPost(args.UserId, args.ChannelId, fmt.Sprintf("Job '%s' has been deleted.", jobName))
 		}
-	case "restart":
+	case "safe-restart":
 		if len(parameters) != 0 {
 			return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Please check `/jenkins help` to find help on how to safe restart Jenkins."), nil
 		}
