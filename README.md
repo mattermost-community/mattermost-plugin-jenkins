@@ -19,7 +19,7 @@ A Mattermost plugin to interact with Jenkins
   
   * Follow similar pattern for all commands which takes jobname as input.
 
-* __Delete  a job__ - `/jenkins delete jobname`.
+* __Delete  a job__ - `/jenkins delete jobname` - Deletes a given job.
 * __Get artifacts__ -  `/jenkins get-artifacts jobname` - Get artifacts of the last build of the given job.
 
 * __Get test results__ -  `/jenkins test-results jobname` - Get test results of the last build of the given job.
