@@ -17,7 +17,7 @@
                 "key": "JenkinsURL",
                 "display_name": "Jenkins URL",
                 "type": "text",
-                "help_text": "Specify the URL with the protocol. Either 'http' or 'https'."
+                "help_text": "The URL for your Jenkins instance. Must start with http:// or https://. For example: https://jenkins.example.com."
             },
             {
                 "key": "Username",
