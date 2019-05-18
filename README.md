@@ -32,7 +32,7 @@ This plugin enables you to interact with jobs via slash commands in Mattermost. 
 * __Get test results__ -  `/jenkins test-results jobname` - Get test results of the last build of the given job.
 * __Get build log__ - `/jenkins get-log jobname <build number>` - Get log of a given build of the specified job as a file attachment to the channel. If `build number` is not specified, the command fetches the log of the last build of the job.
 
-#### Slash Command to interact with Plugins
+#### Interact with Plugins
 * __List of installed plugins__ - `/jenkins plugins` - Get a list of installed plugins on Jenkins server along with the version of the plugin.
 
 #### Adhoc commands
@@ -70,6 +70,29 @@ This will produce a single plugin file (with support for multiple architectures)
 dist/jenkins-0.0.x.tar.gz
 ```
 After the plugin is build, deploy it using Mattermost system console and test it out.
+
+### FAQ
+**How do I generate API Token for a given Jenkins user?**
+
+Since Jenkins 2.129 the API token configuration has changed:
+
+You can now have multiple tokens and name them. They can be revoked individually.
+
+ 1. Log in to Jenkins.
+ 2. Click you name (upper-right corner).
+ 3. Click **Configure** (left-side menu).
+ 4. Use "Add new Token" button to generate a new one then name it.
+ 5. You must copy the token when you generate it as you cannot view the token afterwards.
+ 6. Revoke old tokens when no longer needed.
+
+Before Jenkins 2.129: Show the API token as follows:
+
+1. Log in to Jenkins.
+2. Click your name (upper-right corner).
+3. Click **Configure** (left-side menu).
+4. Click **Show API Token**.
+
+_Source : https://stackoverflow.com/a/45466184/6852930_
 
 ### License
 MIT
