@@ -20,10 +20,11 @@ import (
 // If you add non-reference types to your configuration struct, be sure to rewrite Clone as a deep
 // copy appropriate for your types.
 type configuration struct {
-	JenkinsURL      string
-	Username        string
-	EncryptionKey   string
-	ProfileImageURL string
+	JenkinsURL       string
+	Username         string
+	EncryptionKey    string
+	ProfileImageURL  string
+	PluginsDirectory string
 }
 
 // Clone shallow copies the configuration. Your implementation may require a deep copy if
@@ -71,8 +72,12 @@ func (p *Plugin) setConfiguration(configuration *configuration, serverConfigurat
 		panic("setConfiguration called with the existing configuration")
 	}
 
+	if serverConfiguration.PluginSettings.Directory != nil {
+		configuration.PluginsDirectory = *serverConfiguration.PluginSettings.Directory
+	}
+
 	if serverConfiguration.ServiceSettings.SiteURL != nil {
-		configuration.ProfileImageURL = path.Join(*serverConfiguration.ServiceSettings.SiteURL, "plugins", manifest.Id, "assets", "jenkins.png")
+		configuration.ProfileImageURL = path.Join("/plugins", manifest.Id, "assets", "jenkins.png")
 	}
 
 	p.configuration = configuration

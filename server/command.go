@@ -8,26 +8,35 @@ import (
 	"github.com/mattermost/mattermost-server/plugin"
 )
 
-const helpText = `* |/jenkins connect username APIToken| - Connect your Mattermost account to Jenkins.
+const helpText = `
+###### Connect and disconnect with Jenkins server
+* |/jenkins connect username APIToken| - Connect your Mattermost account to Jenkins.
 * |/jenkins disconnect| - Disconnect your Mattermost account with Jenkins.
-* |/jenkins me| - Display the connected Jenkins account.
+
+###### Interact with Jenkins jobs
+* |/jenkins createjob| - Create a job using config.xml.
 * |/jenkins build jobname| - Trigger a build for the given job.
   * If the job resides in a folder, specify the job as |folder1/jobname|. Note the slash character.
   * If the folder name or job name has spaces in it, wrap the jobname in double quotes as |"job name with space"| or |"folder with space/jobname"|.
   * Follow similar patterns for all commands which takes jobname as input.
   * Use double quotes only when there are spaces in the job name or folder name.
+* |/jenkins abort jobname <build number>| - Abort the build of a given job.
+  * If build number is not specified, the command aborts the last running build.
+* |/jenkins enable jobname| - Enanble a given job.
+* |/jenkins disable jobname| - Disable a given job.
+* |/jenkins delete jobname| - Deletes a given job.
 * |/jenkins get-artifacts jobname| - Get artifacts of the last build of the given job.
 * |/jenkins test-results jobname| - Get test results of the last build of the given job.
 * |/jenkins get-log jobname <build number>| - Get build log of a given job. Build number is optional.
   * If build number is not specified, the command fetches the log of the last build.
-* |/jenkins abort jobname <build number>| - Abort the build of a given job.
-  * If build number is not specified, the command aborts the last running build.
-* |/jenkins disable jobname| - Disable a given job.
-* |/jenkins enable jobname| - Enanble a given job.
-* |/jenkins delete jobname| - Deletes a given job.
-* |/jenkins safe-restart| - Safe restarts the Jenkins server.
+
+###### Interact with Plugins
 * |/jenkins plugins| - Get a list of installed plugins on the Jenkins server.
-* |/jenkins createjob| - Create a job using config.xml.
+
+###### Adhoc Commands
+* |/jenkins safe-restart| - Safe restarts the Jenkins server.
+* |/jenkins me| - Display the connected Jenkins account.
+* |/jenkins help| - Find help related to the syntax of the slash commands.
 `
 const jobNotSpecifiedResponse = "Please specify a job name to build."
 const pollingSleepTime = 10
@@ -74,14 +83,10 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*mo
 			return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Please specify both username and API token."), nil
 		} else if len(parameters) == 2 {
 			p.createEphemeralPost(args.UserId, args.ChannelId, "Validating Jenkins credentials...")
-			verify, verifyErr := p.verifyJenkinsCredentials(parameters[0], parameters[1])
+			_, verifyErr := p.verifyJenkinsCredentials(parameters[0], parameters[1])
 			if verifyErr != nil {
 				p.API.LogError("Error connecting to Jenkins", "user_id", args.UserId, "Err", verifyErr.Error())
 				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Error connecting to Jenkins."), nil
-			}
-
-			if !verify {
-				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Incorrect username or token"), nil
 			}
 
 			jenkinsUserInfo := &JenkinsUserInfo{
