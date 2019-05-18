@@ -2,6 +2,10 @@
 
 A Jenkins plugin to interact with jobs and builds with slash commands in Mattermost. The plugin is currently in beta.
 
+<img src="https://raw.githubusercontent.com/waseem18/mattermost-plugin-jenkins/dev/screenshots/Screen%20Shot%202019-05-07%20at%203.30.22%20PM.png" alt="drawing" width="1000"/>
+
+
+
 For a Jenkins integration that sends webhook notifications from Jenkins to Mattermost, see this repository: https://github.com/jenkinsci/mattermost-plugin
 
 ## Features
