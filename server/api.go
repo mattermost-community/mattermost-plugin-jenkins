@@ -5,9 +5,12 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/mattermost/mattermost-server/model"
 	"github.com/mattermost/mattermost-server/plugin"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -15,6 +18,7 @@ func (p *Plugin) InitAPI() *mux.Router {
 	r := mux.NewRouter()
 	r.HandleFunc("/triggerBuild", p.handleBuildTrigger).Methods("POST")
 	r.HandleFunc("/createJob", p.handleJobCreation).Methods("POST")
+	r.HandleFunc("/assets/jenkins.png", p.handleProfileImage).Methods("GET")
 	return r
 }
 
@@ -25,6 +29,7 @@ func (p *Plugin) ServeHTTP(c *plugin.Context, w http.ResponseWriter, r *http.Req
 		http.Error(w, "This plugin is not configured.", http.StatusNotImplemented)
 		return
 	}
+	w.Header().Set("Content-Type", "application/json")
 	p.API.LogDebug("New request:", "Host", r.Host, "RequestURI", r.RequestURI, "Method", r.Method)
 	p.router.ServeHTTP(w, r)
 }
@@ -82,4 +87,26 @@ func (p *Plugin) handleJobCreation(w http.ResponseWriter, r *http.Request) {
 		jobInputs[k] = v.(string)
 	}
 	p.sendJobCreateRequest(userID, request.ChannelId, jobInputs)
+}
+
+func (p *Plugin) handleProfileImage(w http.ResponseWriter, r *http.Request) {
+	config := p.getConfiguration()
+
+	img, err := os.Open(filepath.Join(config.PluginsDirectory, manifest.Id, "assets", "jenkins.png"))
+	if err != nil {
+		http.NotFound(w, r)
+		p.API.LogError("unable to read Jenkins profile image", "err", err.Error())
+		return
+	}
+	defer func() {
+		if err = img.Close(); err != nil {
+			p.API.LogError("can't close img", "err", err.Error())
+		}
+	}()
+
+	w.Header().Set("Content-Type", "image/png")
+	_, err = io.Copy(w, img)
+	if err != nil {
+		p.API.LogError("can't copy image profile to http response writer", "err", err.Error())
+	}
 }
