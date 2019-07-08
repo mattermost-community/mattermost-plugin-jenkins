@@ -50,7 +50,7 @@ func main() {
 
 	case "has_webapp":
 		if manifest.HasWebapp() {
-			fmt.Printf("false")
+			fmt.Printf("true")
 		}
 
 	case "apply":
