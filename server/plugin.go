@@ -173,9 +173,6 @@ func (p *Plugin) createEphemeralPost(userID, channelID, message string) {
 		ChannelId: channelID,
 		Message:   message,
 		Type:      model.POST_DEFAULT,
-		Props: map[string]interface{}{
-			"from_webhook": "true",
-		},
 	}
 	p.API.SendEphemeralPost(userID, post)
 }
@@ -195,8 +192,7 @@ func (p *Plugin) createPost(userID, channelID, message string) {
 		ChannelId: channelID,
 		Type:      model.POST_DEFAULT,
 		Props: map[string]interface{}{
-			"from_webhook": "true",
-			"attachments":  []*model.SlackAttachment{slackAttachment},
+			"attachments": []*model.SlackAttachment{slackAttachment},
 		},
 	}
 	if _, err := p.API.CreatePost(post); err != nil {
