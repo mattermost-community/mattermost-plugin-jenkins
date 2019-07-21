@@ -38,6 +38,8 @@ type Plugin struct {
 	// configuration is the active plugin configuration. Consult getConfiguration and
 	// setConfiguration for usage.
 	configuration *configuration
+
+	botUserID string
 }
 
 type JenkinsUserInfo struct {
@@ -47,10 +49,15 @@ type JenkinsUserInfo struct {
 }
 
 func (p *Plugin) OnActivate() error {
-	botUserID, err := p.ensureBot()
+	botUserID, err := p.Helpers.EnsureBot(&model.Bot{
+		Username:    botUserName,
+		DisplayName: botDisplayName,
+		Description: botDescription,
+	})
 	if err != nil {
 		return errors.Wrap(err, "failed to ensure bot")
 	}
+	p.botUserID = botUserID
 
 	bundlePath, err := p.API.GetBundlePath()
 	if err != nil {
@@ -161,10 +168,8 @@ func (p *Plugin) verifyJenkinsCredentials(username, token string) (bool, error) 
 
 // createEphemeralPost creates an ephemeral post
 func (p *Plugin) createEphemeralPost(userID, channelID, message string) {
-	botUserID, _ := p.ensureBot()
-
 	post := &model.Post{
-		UserId:    botUserID,
+		UserId:    p.botUserID,
 		ChannelId: channelID,
 		Message:   message,
 		Type:      model.POST_DEFAULT,
@@ -182,20 +187,16 @@ func (p *Plugin) createPost(userID, channelID, message string) {
 		p.API.LogError("Error fetching Jenkins user details", "err", userInfoErr.Error())
 		return
 	}
-	botUserID, _ := p.ensureBot()
 
 	slackAttachment := generateSlackAttachment(message)
 	slackAttachment.Pretext = fmt.Sprintf("Initiated by Jenkins user: %s", userInfo.Username)
-	conf := p.getConfiguration()
 	post := &model.Post{
-		UserId:    botUserID,
+		UserId:    p.botUserID,
 		ChannelId: channelID,
 		Type:      model.POST_DEFAULT,
 		Props: map[string]interface{}{
-			"from_webhook":      "true",
-			"override_username": botUserName,
-			"override_icon_url": conf.ProfileImageURL,
-			"attachments":       []*model.SlackAttachment{slackAttachment},
+			"from_webhook": "true",
+			"attachments":  []*model.SlackAttachment{slackAttachment},
 		},
 	}
 	if _, err := p.API.CreatePost(post); err != nil {
@@ -649,12 +650,4 @@ func (p *Plugin) sendJobCreateRequest(userID, channelID string, parameters map[s
 	p.createPost(userID, channelID, fmt.Sprintf("Job '%s' has been created", job.GetName()))
 
 	return nil
-}
-
-func (p *Plugin) ensureBot() (string, error) {
-	return p.Helpers.EnsureBot(&model.Bot{
-		Username:    botUserName,
-		DisplayName: botDisplayName,
-		Description: botDescription,
-	})
 }

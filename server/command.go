@@ -53,7 +53,7 @@ func getCommand() *model.Command {
 }
 
 func (p *Plugin) postCommandResponse(args *model.CommandArgs, text string) {
-	botUserID, _ := p.ensureBot()
+	botUserID := p.botUserID
 	post := &model.Post{
 		UserId:    botUserID,
 		ChannelId: args.ChannelId,
