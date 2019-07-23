@@ -16,7 +16,7 @@ func TestGetJob(t *testing.T) {
 		res.WriteHeader(http.StatusOK)
 	}))
 	assert.NotNil(t, testServer)
-	defer func() { testServer.Close() }()
+	defer testServer.Close()
 
 	p := &Plugin{}
 	api := &plugintest.API{}
