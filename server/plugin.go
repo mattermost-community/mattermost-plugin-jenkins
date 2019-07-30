@@ -3,23 +3,27 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/gorilla/mux"
-	"github.com/mattermost/mattermost-server/model"
+	"io/ioutil"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/gorilla/mux"
+	"github.com/mattermost/mattermost-server/model"
 	"github.com/mattermost/mattermost-server/plugin"
 	"github.com/pkg/errors"
 	"github.com/waseem18/gojenkins"
 )
 
 const (
-	jenkinsUsername = "Jenkins Plugin"
 	jenkinsTokenKey = "_jenkinsToken"
+	botUserName     = "jenkins"
+	botDisplayName  = "Jenkins"
+	botDescription  = "Created by the Jenkins Plugin."
 )
 
 type Plugin struct {
@@ -33,6 +37,8 @@ type Plugin struct {
 	// configuration is the active plugin configuration. Consult getConfiguration and
 	// setConfiguration for usage.
 	configuration *configuration
+
+	botUserID string
 }
 
 type JenkinsUserInfo struct {
@@ -42,10 +48,34 @@ type JenkinsUserInfo struct {
 }
 
 func (p *Plugin) OnActivate() error {
+	botUserID, err := p.Helpers.EnsureBot(&model.Bot{
+		Username:    botUserName,
+		DisplayName: botDisplayName,
+		Description: botDescription,
+	})
+	if err != nil {
+		return errors.Wrap(err, "failed to ensure bot")
+	}
+	p.botUserID = botUserID
+
+	bundlePath, err := p.API.GetBundlePath()
+	if err != nil {
+		return errors.Wrap(err, "failed to get bundle path")
+	}
+
+	profileImage, err := ioutil.ReadFile(filepath.Join(bundlePath, "assets", "jenkins.png"))
+	if err != nil {
+		return errors.Wrap(err, "failed to read profile image")
+	}
+
+	if appErr := p.API.SetProfileImage(botUserID, profileImage); appErr != nil {
+		return errors.Wrap(appErr, "failed to set profile image")
+	}
+
 	p.API.RegisterCommand(getCommand())
 	p.router = p.InitAPI()
-	configuration := p.getConfiguration()
-	if err := p.IsValid(configuration); err != nil {
+	conf := p.getConfiguration()
+	if err := p.IsValid(conf); err != nil {
 		return err
 	}
 	return nil
@@ -53,7 +83,7 @@ func (p *Plugin) OnActivate() error {
 
 func (p *Plugin) IsValid(configuration *configuration) error {
 	if configuration.JenkinsURL == "" {
-		return fmt.Errorf("Please add Jekins URL in plugin settings")
+		return fmt.Errorf("Please add Jenkins URL in plugin settings")
 	}
 
 	u, err := url.Parse(configuration.JenkinsURL)
@@ -138,15 +168,10 @@ func (p *Plugin) verifyJenkinsCredentials(username, token string) (bool, error) 
 // createEphemeralPost creates an ephemeral post
 func (p *Plugin) createEphemeralPost(userID, channelID, message string) {
 	post := &model.Post{
-		UserId:    userID,
+		UserId:    p.botUserID,
 		ChannelId: channelID,
 		Message:   message,
 		Type:      model.POST_DEFAULT,
-		Props: map[string]interface{}{
-			"from_webhook":      "true",
-			"override_username": jenkinsUsername,
-			"override_icon_url": p.getConfiguration().ProfileImageURL,
-		},
 	}
 	p.API.SendEphemeralPost(userID, post)
 }
@@ -158,17 +183,15 @@ func (p *Plugin) createPost(userID, channelID, message string) {
 		p.API.LogError("Error fetching Jenkins user details", "err", userInfoErr.Error())
 		return
 	}
+
 	slackAttachment := generateSlackAttachment(message)
 	slackAttachment.Pretext = fmt.Sprintf("Initiated by Jenkins user: %s", userInfo.Username)
 	post := &model.Post{
-		UserId:    userID,
+		UserId:    p.botUserID,
 		ChannelId: channelID,
 		Type:      model.POST_DEFAULT,
 		Props: map[string]interface{}{
-			"from_webhook":      "true",
-			"override_username": jenkinsUsername,
-			"override_icon_url": p.getConfiguration().ProfileImageURL,
-			"attachments":       []*model.SlackAttachment{slackAttachment},
+			"attachments": []*model.SlackAttachment{slackAttachment},
 		},
 	}
 	if _, err := p.API.CreatePost(post); err != nil {

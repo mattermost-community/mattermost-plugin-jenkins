@@ -10,10 +10,11 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
-	"github.com/mattermost/mattermost-server/model"
 	"io"
 	"regexp"
 	"strings"
+
+	"github.com/mattermost/mattermost-server/model"
 )
 
 func pad(src []byte) []byte {

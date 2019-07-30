@@ -52,14 +52,19 @@ func getCommand() *model.Command {
 	}
 }
 
-func (p *Plugin) getCommandResponse(responseType, text string) *model.CommandResponse {
-	return &model.CommandResponse{
-		ResponseType: responseType,
-		Username:     jenkinsUsername,
-		IconURL:      p.getConfiguration().ProfileImageURL,
-		Text:         text,
-		Type:         model.POST_DEFAULT,
+func (p *Plugin) postCommandResponse(args *model.CommandArgs, text string) {
+	botUserID := p.botUserID
+	post := &model.Post{
+		UserId:    botUserID,
+		ChannelId: args.ChannelId,
+		Message:   text,
 	}
+	_ = p.API.SendEphemeralPost(args.UserId, post)
+}
+
+func (p *Plugin) getCommandResponse(args *model.CommandArgs, text string) *model.CommandResponse {
+	p.postCommandResponse(args, text)
+	return &model.CommandResponse{}
 }
 
 func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*model.CommandResponse, *model.AppError) {
@@ -80,13 +85,13 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*mo
 	switch action {
 	case "connect":
 		if len(parameters) == 0 || len(parameters) == 1 {
-			return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Please specify both username and API token."), nil
+			return p.getCommandResponse(args, "Please specify both username and API token."), nil
 		} else if len(parameters) == 2 {
 			p.createEphemeralPost(args.UserId, args.ChannelId, "Validating Jenkins credentials...")
 			_, verifyErr := p.verifyJenkinsCredentials(parameters[0], parameters[1])
 			if verifyErr != nil {
 				p.API.LogError("Error connecting to Jenkins", "user_id", args.UserId, "Err", verifyErr.Error())
-				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Error connecting to Jenkins."), nil
+				return p.getCommandResponse(args, "Error connecting to Jenkins."), nil
 			}
 
 			jenkinsUserInfo := &JenkinsUserInfo{
@@ -101,45 +106,45 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*mo
 				return &model.CommandResponse{}, nil
 			}
 
-			return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Your Jenkins account has been successfully connected to Mattermost."), nil
+			return p.getCommandResponse(args, "Your Jenkins account has been successfully connected to Mattermost."), nil
 		}
 	case "build":
 		if len(parameters) == 0 {
-			return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, jobNotSpecifiedResponse), nil
+			return p.getCommandResponse(args, jobNotSpecifiedResponse), nil
 		} else if len(parameters) >= 1 {
 			jobName, extraParam, ok := parseBuildParameters(parameters)
 			if !ok || extraParam != "" {
-				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Please check `/jenkins help` to find help on how to get trigger a job."), nil
+				return p.getCommandResponse(args, "Please check `/jenkins help` to find help on how to get trigger a job."), nil
 			}
 
 			hasParameters, paramErr := p.checkIfJobAcceptsParameters(args.UserId, jobName)
 			if paramErr != nil {
 				p.API.LogError("Error checking for parameters", "err", paramErr.Error())
-				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, fmt.Sprintf("Error triggering build for the job '%s'.", jobName)), nil
+				return p.getCommandResponse(args, fmt.Sprintf("Error triggering build for the job '%s'.", jobName)), nil
 			}
 
 			if hasParameters {
 				err := p.createDialogForParameters(args.UserId, args.TriggerId, jobName, args.ChannelId)
 				if err != nil {
 					p.API.LogError("Error creating dialogue", "err", err.Error())
-					return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, fmt.Sprintf("Error triggering build for the job '%s'.", jobName)), nil
+					return p.getCommandResponse(args, fmt.Sprintf("Error triggering build for the job '%s'.", jobName)), nil
 				}
 			} else {
 				build, err := p.triggerJenkinsJob(args.UserId, args.ChannelId, jobName, nil)
 				if err != nil {
 					p.API.LogError("Error triggering build", "job_name", jobName, "err", err.Error())
-					return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, fmt.Sprintf("Error triggering build for the job '%s'.", jobName)), nil
+					return p.getCommandResponse(args, fmt.Sprintf("Error triggering build for the job '%s'.", jobName)), nil
 				}
 				p.createPost(args.UserId, args.ChannelId, fmt.Sprintf("Job '%s' - #%d has been started\nBuild URL : %s", jobName, build.GetBuildNumber(), build.GetUrl()))
 			}
 		}
 	case "get-artifacts":
 		if len(parameters) == 0 {
-			return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, jobNotSpecifiedResponse), nil
+			return p.getCommandResponse(args, jobNotSpecifiedResponse), nil
 		} else if len(parameters) >= 1 {
 			jobName, buildNumber, ok := parseBuildParameters(parameters)
 			if !ok {
-				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Please check `/jenkins help` to find help on how to get artifacts of a build."), nil
+				return p.getCommandResponse(args, "Please check `/jenkins help` to find help on how to get artifacts of a build."), nil
 			}
 			msg := ""
 			if buildNumber == "" {
@@ -152,16 +157,16 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*mo
 
 			if err := p.fetchAndUploadArtifactsOfABuild(args.UserId, args.ChannelId, jobName, buildNumber); err != nil {
 				p.API.LogError("Error fetching artifacts", "job_name", parameters[0], "err", err.Error())
-				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Error fetching artifacts."), nil
+				return p.getCommandResponse(args, "Error fetching artifacts."), nil
 			}
 		}
 	case "test-results":
 		if len(parameters) == 0 {
-			return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, jobNotSpecifiedResponse), nil
+			return p.getCommandResponse(args, jobNotSpecifiedResponse), nil
 		} else if len(parameters) >= 1 {
 			jobName, buildNumber, ok := parseBuildParameters(parameters)
 			if !ok {
-				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Please check `/jenkins help` to find help on how to get test results of a build."), nil
+				return p.getCommandResponse(args, "Please check `/jenkins help` to find help on how to get test results of a build."), nil
 			}
 			msg := ""
 			if buildNumber == "" {
@@ -174,90 +179,90 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*mo
 
 			if err := p.getBuildTestResultsURL(args.UserId, args.ChannelId, jobName, buildNumber); err != nil {
 				p.API.LogError("Error fetching test results", "job_name", jobName, "err", err.Error())
-				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Error fetching test results."), nil
+				return p.getCommandResponse(args, "Error fetching test results."), nil
 			}
 		}
 	case "disable":
 		if len(parameters) == 0 {
-			return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Please specify a job to disable."), nil
+			return p.getCommandResponse(args, "Please specify a job to disable."), nil
 		} else if len(parameters) >= 1 {
 			jobName, extraParam, ok := parseBuildParameters(parameters)
 			if !ok || extraParam != "" {
-				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Please check `/jenkins help` to find help on how to disable a job."), nil
+				return p.getCommandResponse(args, "Please check `/jenkins help` to find help on how to disable a job."), nil
 			}
 
 			if err := p.disableJob(args.UserId, jobName); err != nil {
 				p.API.LogError("Error disabling the job.", "job_name", jobName, "err", err.Error())
-				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Error disabling the job."), nil
+				return p.getCommandResponse(args, "Error disabling the job."), nil
 			}
 			p.createPost(args.UserId, args.ChannelId, fmt.Sprintf("Job '%s' has been disabled", jobName))
 		}
 	case "enable":
 		if len(parameters) == 0 {
-			return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Please specify a job to enable."), nil
+			return p.getCommandResponse(args, "Please specify a job to enable."), nil
 		} else if len(parameters) >= 1 {
 			jobName, extraParam, ok := parseBuildParameters(parameters)
 			if !ok || extraParam != "" {
-				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Please check `/jenkins help` to find help on how to enable a job."), nil
+				return p.getCommandResponse(args, "Please check `/jenkins help` to find help on how to enable a job."), nil
 			}
 			if err := p.enableJob(args.UserId, jobName); err != nil {
 				p.API.LogError("Error enabling the job.", "job_name", jobName, "err", err.Error())
-				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Error enabling the job."), nil
+				return p.getCommandResponse(args, "Error enabling the job."), nil
 			}
 			p.createPost(args.UserId, args.ChannelId, fmt.Sprintf("Job '%s' has been enabled", jobName))
 		}
 	case "help":
 		text := "###### Mattermost Jenkins Plugin - Slash Command Help\n" + strings.Replace(helpText, "|", "`", -1)
-		return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, text), nil
+		return p.getCommandResponse(args, text), nil
 	case "":
 		text := "###### Mattermost Jenkins Plugin - Slash Command Help\n" + strings.Replace(helpText, "|", "`", -1)
-		return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, text), nil
+		return p.getCommandResponse(args, text), nil
 	case "me":
 		userInfo, err := p.getJenkinsUserInfo(args.UserId)
 		if err != nil {
 			p.API.LogError("Error fetching Jenkins user details", "err", err.Error())
-			return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Encountered an error getting your Jenkins user information."), nil
+			return p.getCommandResponse(args, "Encountered an error getting your Jenkins user information."), nil
 		}
-		return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, fmt.Sprintf("You are connected to Jenkins as: %s", userInfo.Username)), nil
+		return p.getCommandResponse(args, fmt.Sprintf("You are connected to Jenkins as: %s", userInfo.Username)), nil
 	case "disconnect":
 		userInfo, err := p.getJenkinsUserInfo(args.UserId)
 		if err != nil {
 			p.API.LogError("Error fetching Jenkins user details", "err", err.Error())
-			return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Encountered an error getting your Jenkins user information."), nil
+			return p.getCommandResponse(args, "Encountered an error getting your Jenkins user information."), nil
 		}
 
 		if err := p.API.KVDelete(args.UserId + jenkinsTokenKey); err != nil {
 			p.API.LogError("Error disconnecting the user", "err", err.Error())
-			return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Encountered an error while disconnecting the user from Jenkins."), nil
+			return p.getCommandResponse(args, "Encountered an error while disconnecting the user from Jenkins."), nil
 		}
-		return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, fmt.Sprintf("User '%s' has been disconnected.", userInfo.Username)), nil
+		return p.getCommandResponse(args, fmt.Sprintf("User '%s' has been disconnected.", userInfo.Username)), nil
 	case "get-log":
 		if len(parameters) == 0 {
-			return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Please specify a job name or jobname and build number."), nil
+			return p.getCommandResponse(args, "Please specify a job name or jobname and build number."), nil
 		} else if len(parameters) >= 1 {
 			jobName, buildNumber, ok := parseBuildParameters(parameters)
 			if !ok {
-				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Please check `/jenkins help` to find help on how to get log of a build."), nil
+				return p.getCommandResponse(args, "Please check `/jenkins help` to find help on how to get log of a build."), nil
 			}
 			p.createEphemeralPost(args.UserId, args.ChannelId, fmt.Sprintf("Fetching logs of job '%s'...", jobName))
 
 			if err := p.fetchAndUploadBuildLog(args.UserId, args.ChannelId, jobName, buildNumber); err != nil {
 				p.API.LogError("Error fetching logs", "job_name", jobName, "err", err.Error())
-				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Encountered an error fetching logs."), nil
+				return p.getCommandResponse(args, "Encountered an error fetching logs."), nil
 			}
 		}
 	case "abort":
 		if len(parameters) == 0 {
-			return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Please specify a job name or jobname and build number."), nil
+			return p.getCommandResponse(args, "Please specify a job name or jobname and build number."), nil
 		} else if len(parameters) >= 1 {
 			jobName, buildNumber, ok := parseBuildParameters(parameters)
 			if !ok {
-				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Please check `/jenkins help` to find help on how to abort a build."), nil
+				return p.getCommandResponse(args, "Please check `/jenkins help` to find help on how to abort a build."), nil
 			}
 
 			if err := p.abortBuild(args.UserId, jobName, buildNumber); err != nil {
 				p.API.LogError("Error aborting Jenkins build", "job_name", jobName, "err", err.Error())
-				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Encountered an error in aborting the build."), nil
+				return p.getCommandResponse(args, "Encountered an error in aborting the build."), nil
 			}
 			msg := ""
 			if buildNumber == "" {
@@ -270,44 +275,44 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*mo
 		}
 	case "delete":
 		if len(parameters) == 0 {
-			return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Please specify a job name or jobname and build number."), nil
+			return p.getCommandResponse(args, "Please specify a job name or jobname and build number."), nil
 		} else if len(parameters) >= 1 {
 			jobName, extraParam, ok := parseBuildParameters(parameters)
 			if !ok || extraParam != "" {
-				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Please check `/jenkins help` to find help on how to delete a job."), nil
+				return p.getCommandResponse(args, "Please check `/jenkins help` to find help on how to delete a job."), nil
 			}
 
 			if err := p.deleteJob(args.UserId, jobName); err != nil {
 				p.API.LogError("Error deleting the job", "job_name", jobName, "err", err.Error())
-				return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Encountered an error while deleting the job."), nil
+				return p.getCommandResponse(args, "Encountered an error while deleting the job."), nil
 			}
 
 			p.createPost(args.UserId, args.ChannelId, fmt.Sprintf("Job '%s' has been deleted.", jobName))
 		}
 	case "safe-restart":
 		if len(parameters) != 0 {
-			return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Please check `/jenkins help` to find help on how to safe restart Jenkins."), nil
+			return p.getCommandResponse(args, "Please check `/jenkins help` to find help on how to safe restart Jenkins."), nil
 		}
 		if err := p.safeRestart(args.UserId); err != nil {
 			p.API.LogError("Error while safe restarting the Jenkins server", err.Error())
-			return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Encountered an error while safe restarting the Jenkins server."), nil
+			return p.getCommandResponse(args, "Encountered an error while safe restarting the Jenkins server."), nil
 		}
 		p.createPost(args.UserId, args.ChannelId, "Safe restart of Jenkins server has been triggered.")
 	case "plugins":
 		if len(parameters) != 0 {
-			return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Please check `/jenkins help` to find help on how to get a list of plugins."), nil
+			return p.getCommandResponse(args, "Please check `/jenkins help` to find help on how to get a list of plugins."), nil
 		}
 		if err := p.getListOfInstalledPlugins(args.UserId, args.ChannelId); err != nil {
 			p.API.LogError("Error while fetching list of installed plugins", err.Error())
-			return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Encountered an error while fetching list of installed plugins"), nil
+			return p.getCommandResponse(args, "Encountered an error while fetching list of installed plugins"), nil
 		}
 	case "createjob":
 		if len(parameters) != 0 {
-			return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Please check `/jenkins help` to find help on how to create a job."), nil
+			return p.getCommandResponse(args, "Please check `/jenkins help` to find help on how to create a job."), nil
 		}
 		if err := p.createJob(args.UserId, args.ChannelId, args.TriggerId); err != nil {
 			p.API.LogError("Error while creating the job.", err.Error())
-			return p.getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, "Encountered an error while creating the job"), nil
+			return p.getCommandResponse(args, "Encountered an error while creating the job"), nil
 		}
 	}
 	return &model.CommandResponse{}, nil
