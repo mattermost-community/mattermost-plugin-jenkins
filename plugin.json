@@ -2,7 +2,7 @@
     "id": "jenkins",
     "name": "Jenkins plugin",
     "description": "Jenkins plugin for Mattermost",
-    "version": "0.0.4",
+    "version": "1.0.0",
     "server": {
         "executables": {
             "linux-amd64": "server/dist/plugin-linux-amd64",
