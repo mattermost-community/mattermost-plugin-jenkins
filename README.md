@@ -7,7 +7,7 @@ A Jenkins plugin to interact with jobs and builds with slash commands in Matterm
 
 Originally developed by [Wasim Thabraze](https://github.com/waseem18).
 
-<img src="https://raw.githubusercontent.com/waseem18/mattermost-plugin-jenkins/dev/screenshots/Screen%20Shot%202019-05-07%20at%203.30.22%20PM.png" alt="drawing" width="1000"/>
+<img src="https://github.com/mattermost/mattermost-plugin-jenkins/blob/master/screenshots/2019-08-07_04-14-58%20(3).gif" alt="drawing" width="1000"/>
 
 
 
