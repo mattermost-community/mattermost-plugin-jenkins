@@ -3,7 +3,7 @@
 [![Build Status](https://img.shields.io/circleci/project/github/mattermost/mattermost-plugin-jenkins/master.svg)](https://circleci.com/gh/mattermost/mattermost-plugin-jenkins)
 [![Code Coverage](https://img.shields.io/codecov/c/github/mattermost/mattermost-plugin-jenkins/master.svg)](https://codecov.io/gh/mattermost/mattermost-plugin-jenkins)
 
-A Jenkins plugin to interact with jobs and builds with slash commands in Mattermost. 
+A Jenkins plugin to interact with jobs and builds, with slash commands in Mattermost. 
 
 Originally developed by [Wasim Thabraze](https://github.com/waseem18).
 
