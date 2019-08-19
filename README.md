@@ -3,15 +3,25 @@
 [![Build Status](https://img.shields.io/circleci/project/github/mattermost/mattermost-plugin-jenkins/master.svg)](https://circleci.com/gh/mattermost/mattermost-plugin-jenkins)
 [![Code Coverage](https://img.shields.io/codecov/c/github/mattermost/mattermost-plugin-jenkins/master.svg)](https://codecov.io/gh/mattermost/mattermost-plugin-jenkins)
 
-A Jenkins plugin to interact with jobs and builds with slash commands in Mattermost. The plugin is currently in beta.
+A Jenkins plugin to interact with jobs and builds, with slash commands in Mattermost. 
 
 Originally developed by [Wasim Thabraze](https://github.com/waseem18).
 
 <img src="https://github.com/mattermost/mattermost-plugin-jenkins/blob/master/screenshots/2019-08-07_04-14-58%20(3).gif" alt="drawing" width="1000"/>
 
+By extending Mattermost with the Jenkins integration, your team will enjoy:
 
+* Improved collaboration. Keep your team in sync with your latest build by automatically routing notifications to specific Mattermost Channels to display information about when builds start, whether they’re successful, or if exceptions occurred.
+* Increased productivity. Start Jenkins job builds and get logs and artifacts—all without leaving the Mattermost platform.
+* Centralized workflows. Consolidate builds into one channel to keep a timeline of key Jenkins builds in one place and avoid hunting across builds. 
 
-For a Jenkins integration that sends webhook notifications from Jenkins to Mattermost, see this repository: https://github.com/jenkinsci/mattermost-plugin
+Integrating Mattermost with Jenkins lets you keep your whole DevOps team on top of recent builds and any failures that may occur. With the Mattermost Jenkins plugin, control over Jenkins functions is always at the fingertips of your entire DevOps team.
+
+By using the Mattermost Jenkins integration, your team will spend less time switching over to Jenkins, logging in, and finishing builds. 
+
+## Plugin for Jenkins Server
+
+For a Jenkins integration that sends webhook notifications from Jenkins to Mattermost as post-build actions, see this repository: https://github.com/jenkinsci/mattermost-plugin This is useful for sending Jenkins notifications to specific channels.  For example - whenever a new Release of your software is cut, it should notify the #Release channel in Mattermost.  Using the Jenkins post-build action plugin lets you notify the right channels about success/failures. 
 
 ## Features
 
@@ -74,7 +84,7 @@ This will produce a single plugin file (with support for multiple architectures)
 ```
 dist/jenkins-0.0.x.tar.gz
 ```
-After the plugin is build, deploy it using Mattermost system console and test it out.
+After the plugin is built, deploy it using Mattermost system console and test it out.
 
 ### FAQ
 **How do I generate API Token for a given Jenkins user?**
