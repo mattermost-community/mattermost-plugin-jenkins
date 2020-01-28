@@ -2,7 +2,11 @@
     "id": "jenkins",
     "name": "Jenkins plugin",
     "description": "Jenkins plugin for Mattermost",
+    "homepage_url": "https://github.com/mattermost/mattermost-plugin-jenkins",
+    "support_url": "https://github.com/mattermost/mattermost-plugin-jenkins/issues",
+    "icon_path": "assets/icon.svg",
     "version": "1.0.0",
+    "min_server_version": "5.12.0",
     "server": {
         "executables": {
             "linux-amd64": "server/dist/plugin-linux-amd64",
