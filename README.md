@@ -64,10 +64,6 @@ This plugin enables you to interact with jobs via slash commands in Mattermost. 
     1. Go to the **System Console -> Plugins -> Jenkins**
     2. Set the Jenkins server URL along with the protocol. Example: http://jenkins.example.com, https://jenkins.example.com
     3. Save the settings
-3. Configure a bot account
-    1. Create a new Mattermost user, through the regular UI or the CLI with the username "Jenkins"
-    2. Go to the **System Console -> Plugins -> Jenkins** and select this user in the User setting
-    3. Save the settings
 4. Generate an at rest encryption key
     1. Go to the **System Console -> Plugins -> Jenkins** and click "Regenerate" under "At Rest Encryption Key"
     2. Save the settings
