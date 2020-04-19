@@ -60,16 +60,16 @@ This plugin enables you to interact with jobs via slash commands in Mattermost. 
     1. Download the latest version of the plugin from the GitHub releases page
     2. In Mattermost, go to **System Console -> Plugins -> Management**
     3. Upload the plugin
-2. Enter Jenkins server URL
+1. Enter Jenkins server URL
     1. Go to the **System Console -> Plugins -> Jenkins**
     2. Set the Jenkins server URL along with the protocol. Example: http://jenkins.example.com, https://jenkins.example.com
     3. Save the settings
-4. Generate an at rest encryption key
+1. Generate an at rest encryption key
     1. Go to the **System Console -> Plugins -> Jenkins** and click "Regenerate" under "At Rest Encryption Key"
     2. Save the settings
-5. Enable the plugin
+1. Enable the plugin
     1. Go to System Console -> Plugins -> Management and click "Enable" underneath the Jenkins plugin
-6. Test it out
+1. Test it out
     1. In Mattermost, run the slash command `/jenkins connect <Jenkins Username> <Jenkins API Token>`
 
 ### Development
