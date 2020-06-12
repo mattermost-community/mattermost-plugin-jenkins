@@ -177,7 +177,7 @@ func (p *Plugin) createEphemeralPost(userID, channelID, message string) {
 }
 
 // createPost creates a non epehemeral post
-func (p *Plugin) createPost(userID, channelID, message string) {
+func (p *Plugin) createPost(userID, channelID, message string, fileIds ...string) {
 	userInfo, userInfoErr := p.getJenkinsUserInfo(userID)
 	if userInfoErr != nil {
 		p.API.LogError("Error fetching Jenkins user details", "err", userInfoErr.Error())
@@ -194,6 +194,11 @@ func (p *Plugin) createPost(userID, channelID, message string) {
 			"attachments": []*model.SlackAttachment{slackAttachment},
 		},
 	}
+
+	if len(fileIds) > 0 {
+		post.FileIds = append(post.FileIds, fileIds[0])
+	}
+
 	if _, err := p.API.CreatePost(post); err != nil {
 		p.API.LogError("Could not create a post", "user_id", userID, "err", err.Error())
 	}
@@ -471,7 +476,6 @@ func (p *Plugin) createDialogForParameters(userID, triggerID, jobName, channelID
 // fetchAndUploadBuildLog fetches console log of the given job and build.
 // and uploads the console log as file to Mattermost server.
 func (p *Plugin) fetchAndUploadBuildLog(userID, channelID, jobName, buildID string) error {
-	config := p.API.GetConfig()
 	build, buildErr := p.getBuild(jobName, userID, buildID)
 	if buildErr != nil {
 		return buildErr
@@ -482,8 +486,8 @@ func (p *Plugin) fetchAndUploadBuildLog(userID, channelID, jobName, buildID stri
 		return errors.Wrap(fileUploadErr, "Error uploading file")
 	}
 
-	msg := fmt.Sprintf("Console log of the build #%d of the job '%s' : %s", build.GetBuildNumber(), jobName, *config.ServiceSettings.SiteURL+"/api/v4/files/"+fileInfo.Id)
-	p.createPost(userID, channelID, msg)
+	msg := fmt.Sprintf("Console log of the build #%d of the job '%s'", build.GetBuildNumber(), jobName)
+	p.createPost(userID, channelID, msg, fileInfo.Id)
 	return nil
 }
 
