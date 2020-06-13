@@ -1,6 +1,6 @@
 {
     "id": "jenkins",
-    "name": "Jenkins plugin",
+    "name": "Jenkins",
     "description": "Jenkins plugin for Mattermost",
     "homepage_url": "https://github.com/mattermost/mattermost-plugin-jenkins",
     "support_url": "https://github.com/mattermost/mattermost-plugin-jenkins/issues",
