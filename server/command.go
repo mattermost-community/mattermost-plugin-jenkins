@@ -314,6 +314,9 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*mo
 			p.API.LogError("Error while creating the job.", err.Error())
 			return p.getCommandResponse(args, "Encountered an error while creating the job"), nil
 		}
+	default:
+		text := "###### Mattermost Jenkins Plugin - Slash Command Help\n" + strings.Replace(helpText, "|", "`", -1)
+		return p.getCommandResponse(args, text), nil
 	}
 	return &model.CommandResponse{}, nil
 }
