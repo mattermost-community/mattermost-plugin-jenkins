@@ -480,8 +480,10 @@ func (p *Plugin) fetchAndUploadBuildLog(userID, channelID, jobName, buildID stri
 	if buildErr != nil {
 		return buildErr
 	}
+
 	consoleOutput := build.GetConsoleOutput()
-	fileInfo, fileUploadErr := p.API.UploadFile([]byte(consoleOutput), channelID, jobName)
+	filename := fmt.Sprintf("%s-%d", jobName, build.GetBuildNumber())
+	fileInfo, fileUploadErr := p.API.UploadFile([]byte(consoleOutput), channelID, filename)
 	if fileUploadErr != nil {
 		return errors.Wrap(fileUploadErr, "Error uploading file")
 	}
