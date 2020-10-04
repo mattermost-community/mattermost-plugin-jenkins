@@ -2,16 +2,18 @@ package main
 
 import (
 	"fmt"
-	"github.com/gorilla/mux"
-	"github.com/mattermost/mattermost-server/v5/model"
-	"github.com/mattermost/mattermost-server/v5/plugin"
 	"io"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/gorilla/mux"
+	"github.com/mattermost/mattermost-server/v5/model"
+	"github.com/mattermost/mattermost-server/v5/plugin"
 )
 
 func (p *Plugin) InitAPI() *mux.Router {
@@ -86,13 +88,15 @@ func (p *Plugin) handleJobCreation(w http.ResponseWriter, r *http.Request) {
 	for k, v := range request.Submission {
 		jobInputs[k] = v.(string)
 	}
-	p.sendJobCreateRequest(userID, request.ChannelId, jobInputs)
+	if err := p.sendJobCreateRequest(userID, request.ChannelId, jobInputs); err != nil {
+		log.Println("Error sending job creation request", err)
+	}
 }
 
 func (p *Plugin) handleProfileImage(w http.ResponseWriter, r *http.Request) {
 	config := p.getConfiguration()
 
-	img, err := os.Open(filepath.Join(config.PluginsDirectory, manifest.Id, "assets", "jenkins.png"))
+	img, err := os.Open(filepath.Join(config.PluginsDirectory, manifest.ID, "assets", "jenkins.png"))
 	if err != nil {
 		http.NotFound(w, r)
 		p.API.LogError("unable to read Jenkins profile image", "err", err.Error())

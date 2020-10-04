@@ -48,7 +48,7 @@ func encrypt(key []byte, text string) (string, error) {
 	}
 
 	cfb := cipher.NewCFBEncrypter(block, iv)
-	cfb.XORKeyStream(ciphertext[aes.BlockSize:], []byte(msg))
+	cfb.XORKeyStream(ciphertext[aes.BlockSize:], msg)
 	finalMsg := base64.URLEncoding.EncodeToString(ciphertext)
 	return finalMsg, nil
 }
@@ -65,7 +65,7 @@ func decrypt(key []byte, text string) (string, error) {
 	}
 
 	if (len(decodedMsg) % aes.BlockSize) != 0 {
-		return "", errors.New("blocksize must be multipe of decoded message length")
+		return "", errors.New("blocksize must be multiple of decoded message length")
 	}
 
 	iv := decodedMsg[:aes.BlockSize]
@@ -100,7 +100,7 @@ func parseBuildParameters(parameters []string) (string, string, bool) {
 		}
 		return paramString, "", true
 	}
-	regex, _ := regexp.Compile(`("[^"]*"|[^"\s]+)\s*(\w*)`)
+	regex := regexp.MustCompile(`("[^"]*"|[^"\s]+)\s*(\w*)`)
 	submatches := regex.FindAllStringSubmatch(paramString, -1)
 	if len(submatches) == 0 || len(submatches) > 1 {
 		return "", "", false
