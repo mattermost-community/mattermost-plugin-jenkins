@@ -49,7 +49,71 @@ func getCommand() *model.Command {
 		AutoComplete:     true,
 		AutoCompleteDesc: "Available commands: connect, disconnect, me, build, get-artifacts, test-results, get-log, abort, disable, enable, delete, safe-restart, plugins, createjob, help",
 		AutoCompleteHint: "[command]",
+		AutocompleteData: getAutocompleteData(),
 	}
+}
+
+func getAutocompleteData() *model.AutocompleteData {
+	jenkins := model.NewAutocompleteData("jenkins", "[subcommand]", "A Mattermost plugin to interact with Jenkins")
+
+	connect := model.NewAutocompleteData("connect", "[username] [APIToken]", "Connect to your Jenkins account")
+	connect.AddTextArgument("Your username of Jenkins", "[username]", "")
+	connect.AddTextArgument("You API token from Jenkins", "[API token]", "")
+
+	disconnect := model.NewAutocompleteData("disconnect", "", "Disconnect from your Jenkins account")
+
+	createjob := model.NewAutocompleteData("createjob", "", "Create a Jenkins job using contents of config.xml")
+
+	build := model.NewAutocompleteData("build", "[jobname]", "Trigger a build for the giben job")
+	build.AddTextArgument("folder1/jobname if the job is in a folder, or \"job with space\"", "[jobname]", "")
+
+	abort := model.NewAutocompleteData("abort", "[jobname] <build number>", "Abort the given build of the specified job")
+	abort.AddTextArgument("Job you want to abort a build to", "[jobname]", "")
+	abort.AddTextArgument("Build number to abort. If not specified, the last build is chosen", "<build number>", "")
+
+	enable := model.NewAutocompleteData("enable", "[jobname]", "Enable a given Jenkins job")
+	enable.AddTextArgument("The job you want to enable", "[jobname]", "")
+
+	disable := model.NewAutocompleteData("disable", "[jobname]", "Disable a given Jenkins job")
+	disable.AddTextArgument("The job you want to disable", "[jobname]", "")
+
+	delete := model.NewAutocompleteData("delete", "[jobname]", "Delete a given job")
+	delete.AddTextArgument("The job you want to delete", "[jobname]", "")
+
+	getArtifacts := model.NewAutocompleteData("get-artifacts", "[jobname]", "Get artifacts of the last build of the given job")
+	getArtifacts.AddTextArgument("The job you want to get artifacts from", "[jobname]", "")
+
+	testResults := model.NewAutocompleteData("test-results", "[jobname]", "Get test results of the last build of the given job")
+	getArtifacts.AddTextArgument("The job you want to get test results from", "[jobname]", "")
+
+	getLog := model.NewAutocompleteData("get-log", "[jobname] <build number>", "Get log of a build of the given job")
+	getLog.AddTextArgument("The job you want to get log from", "[jobname]", "")
+	getLog.AddTextArgument("Build number to get log from. If not specified, the last build is chosen", "<build number>", "")
+
+	plugins := model.NewAutocompleteData("plugins", "", "Get a list of installed plugins on Jenkins server")
+
+	safeRestart := model.NewAutocompleteData("safe-restart", "", "Safe restart of the Jenkins server")
+
+	me := model.NewAutocompleteData("me", "", "Display the connected Jenkins account")
+
+	help := model.NewAutocompleteData("help", "", "Find help related to the syntaxc of the slash commands")
+
+	jenkins.AddCommand(connect)
+	jenkins.AddCommand(disconnect)
+	jenkins.AddCommand(createjob)
+	jenkins.AddCommand(build)
+	jenkins.AddCommand(abort)
+	jenkins.AddCommand(enable)
+	jenkins.AddCommand(disable)
+	jenkins.AddCommand(delete)
+	jenkins.AddCommand(getArtifacts)
+	jenkins.AddCommand(testResults)
+	jenkins.AddCommand(getLog)
+	jenkins.AddCommand(plugins)
+	jenkins.AddCommand(safeRestart)
+	jenkins.AddCommand(me)
+	jenkins.AddCommand(help)
+	return jenkins
 }
 
 func (p *Plugin) postCommandResponse(args *model.CommandArgs, text string) {
