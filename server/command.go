@@ -98,21 +98,21 @@ func getAutocompleteData() *model.AutocompleteData {
 
 	help := model.NewAutocompleteData("help", "", "Find help related to the syntax of the slash commands")
 
-	jenkins.AddCommand(connect)
-	jenkins.AddCommand(disconnect)
-	jenkins.AddCommand(createjob)
-	jenkins.AddCommand(build)
 	jenkins.AddCommand(abort)
-	jenkins.AddCommand(enable)
-	jenkins.AddCommand(disable)
+	jenkins.AddCommand(build)
+	jenkins.AddCommand(connect)
+	jenkins.AddCommand(createjob)
 	jenkins.AddCommand(delete)
+	jenkins.AddCommand(disable)
+	jenkins.AddCommand(disconnect)
+	jenkins.AddCommand(enable)
 	jenkins.AddCommand(getArtifacts)
-	jenkins.AddCommand(testResults)
 	jenkins.AddCommand(getLog)
+	jenkins.AddCommand(help)
+	jenkins.AddCommand(me)
 	jenkins.AddCommand(plugins)
 	jenkins.AddCommand(safeRestart)
-	jenkins.AddCommand(me)
-	jenkins.AddCommand(help)
+	jenkins.AddCommand(testResults)
 	return jenkins
 }
 
