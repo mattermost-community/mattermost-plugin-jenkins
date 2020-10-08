@@ -56,19 +56,19 @@ func getCommand() *model.Command {
 func getAutocompleteData() *model.AutocompleteData {
 	jenkins := model.NewAutocompleteData("jenkins", "[subcommand]", "A Mattermost plugin to interact with Jenkins")
 
-	connect := model.NewAutocompleteData("connect", "[username] [APIToken]", "Connect to your Jenkins account")
-	connect.AddTextArgument("Your username of Jenkins", "[username]", "")
-	connect.AddTextArgument("You API token from Jenkins", "[API token]", "")
+	connect := model.NewAutocompleteData("connect", "[username] [APIToken]", "Connect your Mattermost account to your Jenkins account")
+	connect.AddTextArgument("The username of your Jenkins account", "[username]", "")
+	connect.AddTextArgument("Your API token from Jenkins", "[API token]", "")
 
-	disconnect := model.NewAutocompleteData("disconnect", "", "Disconnect from your Jenkins account")
+	disconnect := model.NewAutocompleteData("disconnect", "", "Disconnect your Mattermost account from your Jenkins account")
 
-	createjob := model.NewAutocompleteData("createjob", "", "Create a Jenkins job using contents of config.xml")
+	createjob := model.NewAutocompleteData("createjob", "", "Create a Jenkins job using the contents of a config.xml file")
 
-	build := model.NewAutocompleteData("build", "[jobname]", "Trigger a build for the giben job")
+	build := model.NewAutocompleteData("build", "[jobname]", "Trigger a build for a given job")
 	build.AddTextArgument("folder1/jobname if the job is in a folder, or \"job with space\"", "[jobname]", "")
 
 	abort := model.NewAutocompleteData("abort", "[jobname] <build number>", "Abort the given build of the specified job")
-	abort.AddTextArgument("Job you want to abort a build to", "[jobname]", "")
+	abort.AddTextArgument("Job associated with the build you want to abort", "[jobname]", "")
 	abort.AddTextArgument("Build number to abort. If not specified, the last build is chosen", "<build number>", "")
 
 	enable := model.NewAutocompleteData("enable", "[jobname]", "Enable a given Jenkins job")
@@ -90,13 +90,13 @@ func getAutocompleteData() *model.AutocompleteData {
 	getLog.AddTextArgument("The job you want to get log from", "[jobname]", "")
 	getLog.AddTextArgument("Build number to get log from. If not specified, the last build is chosen", "<build number>", "")
 
-	plugins := model.NewAutocompleteData("plugins", "", "Get a list of installed plugins on Jenkins server")
+	plugins := model.NewAutocompleteData("plugins", "", "Get a list of installed plugins on the Jenkins server")
 
 	safeRestart := model.NewAutocompleteData("safe-restart", "", "Safe restart of the Jenkins server")
 
 	me := model.NewAutocompleteData("me", "", "Display the connected Jenkins account")
 
-	help := model.NewAutocompleteData("help", "", "Find help related to the syntaxc of the slash commands")
+	help := model.NewAutocompleteData("help", "", "Find help related to the syntax of the slash commands")
 
 	jenkins.AddCommand(connect)
 	jenkins.AddCommand(disconnect)
