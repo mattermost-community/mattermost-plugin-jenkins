@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -89,7 +88,7 @@ func (p *Plugin) handleJobCreation(w http.ResponseWriter, r *http.Request) {
 		jobInputs[k] = v.(string)
 	}
 	if err := p.sendJobCreateRequest(userID, request.ChannelId, jobInputs); err != nil {
-		log.Println("Error sending job creation request", err)
+		p.API.LogWarn("Error sending job creation request", "err", err)
 	}
 }
 

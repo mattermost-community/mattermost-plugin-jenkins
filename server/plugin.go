@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"net/url"
 	"path/filepath"
@@ -74,7 +73,7 @@ func (p *Plugin) OnActivate() error {
 	}
 
 	if cmdErr := p.API.RegisterCommand(getCommand()); cmdErr != nil {
-		log.Println("Error registering Jenkins custom command", cmdErr)
+		p.API.LogWarn("Error registering Jenkins custom command", "err", cmdErr)
 	}
 
 	p.router = p.InitAPI()
@@ -321,7 +320,7 @@ func (p *Plugin) checkIfJobHasStarted(jenkins *gojenkins.Jenkins, jobName string
 		}
 		time.Sleep(pollingSleepTime * time.Second)
 		if _, err := task.Poll(); err != nil {
-			log.Println("Error polling jenkins job to check the build status", err)
+			p.API.LogWarn("Error polling jenkins job to check the build status", "err", err)
 		}
 	}
 	buildInfo, buildErr := jenkins.GetBuild(jobName, task.Raw.Executable.Number)
