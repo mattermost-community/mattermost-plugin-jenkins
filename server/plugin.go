@@ -158,11 +158,11 @@ func (p *Plugin) verifyJenkinsCredentials(username, token string) (bool, error) 
 		return false, err
 	}
 	scheme := u.Scheme
-	url := fmt.Sprintf("%s://%s:%s@%s", scheme, username, token, u.Host)
-	response, respErr := http.Get(url)
+	response, respErr := http.Get(fmt.Sprintf("%s://%s:%s@%s", scheme, username, token, u.Host))
 	if respErr != nil {
 		return false, respErr
 	}
+	defer response.Body.Close()
 	if response.StatusCode == 200 {
 		return true, nil
 	}
