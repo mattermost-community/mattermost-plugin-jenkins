@@ -72,8 +72,8 @@ func (p *Plugin) OnActivate() error {
 		return errors.Wrap(appErr, "failed to set profile image")
 	}
 
-	if cmdErr := p.API.RegisterCommand(getCommand()); cmdErr != nil {
-		p.API.LogWarn("Error registering Jenkins custom command", "err", cmdErr)
+	if err := p.API.RegisterCommand(getCommand()); err != nil {
+		p.API.LogWarn("Error registering Jenkins custom command", "err", err)
 	}
 
 	p.router = p.InitAPI()
