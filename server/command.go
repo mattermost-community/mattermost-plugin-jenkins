@@ -6,6 +6,8 @@ import (
 
 	"github.com/mattermost/mattermost-server/v5/model"
 	"github.com/mattermost/mattermost-server/v5/plugin"
+	"github.com/mattermost/mattermost-plugin-api/experimental/command"
+	"github.com/pkg/errors"
 )
 
 const helpText = `
@@ -41,7 +43,13 @@ const helpText = `
 const jobNotSpecifiedResponse = "Please specify a job name to build."
 const pollingSleepTime = 10
 
-func getCommand() *model.Command {
+func (p *Plugin) getCommand() (*model.Command, error) {
+	iconData, err := command.GetIconData(p.API, "assets/icon.svg")
+
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get icon data")
+	}
+
 	return &model.Command{
 		Trigger:          "jenkins",
 		Description:      "A Mattermost plugin to interact with Jenkins",
@@ -49,7 +57,8 @@ func getCommand() *model.Command {
 		AutoComplete:     true,
 		AutoCompleteDesc: "Available commands: connect, disconnect, me, build, get-artifacts, test-results, get-log, abort, disable, enable, delete, safe-restart, plugins, createjob, help",
 		AutoCompleteHint: "[command]",
-	}
+		AutocompleteIconData: iconData,
+	}, nil
 }
 
 func (p *Plugin) postCommandResponse(args *model.CommandArgs, text string) {
