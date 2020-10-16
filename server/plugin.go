@@ -72,7 +72,12 @@ func (p *Plugin) OnActivate() error {
 		return errors.Wrap(appErr, "failed to set profile image")
 	}
 
-	if err := p.API.RegisterCommand(getCommand()); err != nil {
+	command, err := p.getCommand()
+	if err != nil {
+		return errors.Wrap(err, "failed to get command")
+	}
+
+	if err := p.API.RegisterCommand(command); err != nil {
 		p.API.LogWarn("Error registering Jenkins custom command", "err", err)
 	}
 
