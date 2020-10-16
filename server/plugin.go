@@ -72,7 +72,12 @@ func (p *Plugin) OnActivate() error {
 		return errors.Wrap(appErr, "failed to set profile image")
 	}
 
-	p.API.RegisterCommand(getCommand())
+	command, err := p.getCommand()
+	if err != nil {
+		return errors.Wrap(err, "failed to get command")
+	}
+
+	p.API.RegisterCommand(command)
 	p.router = p.InitAPI()
 	conf := p.getConfiguration()
 	if err := p.IsValid(conf); err != nil {
