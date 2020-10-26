@@ -199,7 +199,7 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*mo
 			if hasParameters {
 				err := p.createDialogForParameters(args.UserId, args.TriggerId, jobName, args.ChannelId)
 				if err != nil {
-					p.API.LogError("Error creating dialogue", "err", err.Error())
+					p.API.LogError("Error creating dialog", "err", err.Error())
 					return p.getCommandResponse(args, fmt.Sprintf("Error triggering build for the job '%s'.", jobName)), nil
 				}
 			} else {
@@ -285,10 +285,10 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*mo
 			p.createPost(args.UserId, args.ChannelId, fmt.Sprintf("Job '%s' has been enabled", jobName))
 		}
 	case "help":
-		text := "###### Mattermost Jenkins Plugin - Slash Command Help\n" + strings.Replace(helpText, "|", "`", -1)
+		text := "###### Mattermost Jenkins Plugin - Slash Command Help\n" + strings.ReplaceAll(helpText, "|", "`")
 		return p.getCommandResponse(args, text), nil
 	case "":
-		text := "###### Mattermost Jenkins Plugin - Slash Command Help\n" + strings.Replace(helpText, "|", "`", -1)
+		text := "###### Mattermost Jenkins Plugin - Slash Command Help\n" + strings.ReplaceAll(helpText, "|", "`")
 		return p.getCommandResponse(args, text), nil
 	case "me":
 		userInfo, err := p.getJenkinsUserInfo(args.UserId)
@@ -388,7 +388,7 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*mo
 			return p.getCommandResponse(args, "Encountered an error while creating the job"), nil
 		}
 	default:
-		text := "###### Unknown Command: " + action + "\n" + "###### Mattermost Jenkins Plugin - Slash Command Help\n" + strings.Replace(helpText, "|", "`", -1)
+		text := "###### Unknown Command: " + action + "\n" + "###### Mattermost Jenkins Plugin - Slash Command Help\n" + strings.ReplaceAll(helpText, "|", "`")
 		return p.getCommandResponse(args, text), nil
 	}
 	return &model.CommandResponse{}, nil

@@ -77,7 +77,10 @@ func (p *Plugin) OnActivate() error {
 		return errors.Wrap(err, "failed to get command")
 	}
 
-	p.API.RegisterCommand(command)
+	if err := p.API.RegisterCommand(command); err != nil {
+		p.API.LogWarn("Error registering Jenkins custom command", "err", err)
+	}
+
 	p.router = p.InitAPI()
 	conf := p.getConfiguration()
 	if err := p.IsValid(conf); err != nil {
@@ -88,7 +91,7 @@ func (p *Plugin) OnActivate() error {
 
 func (p *Plugin) IsValid(configuration *configuration) error {
 	if configuration.JenkinsURL == "" {
-		return fmt.Errorf("Please add Jenkins URL in plugin settings")
+		return fmt.Errorf("please add Jenkins URL in plugin settings")
 	}
 
 	u, err := url.Parse(configuration.JenkinsURL)
@@ -97,7 +100,7 @@ func (p *Plugin) IsValid(configuration *configuration) error {
 	}
 
 	if u.Scheme == "" {
-		return fmt.Errorf("Please add scheme to the URL. HTTP or HTTPS")
+		return fmt.Errorf("please add scheme to the URL. HTTP or HTTPS")
 	}
 
 	return nil
@@ -135,7 +138,7 @@ func (p *Plugin) getJenkinsUserInfo(userID string) (*JenkinsUserInfo, error) {
 	if infoErr != nil {
 		return nil, infoErr
 	} else if infoBytes == nil {
-		return nil, errors.New("User not found")
+		return nil, errors.New("user not found")
 	} else if err := json.Unmarshal(infoBytes, &userInfo); err != nil {
 		return nil, err
 	}
@@ -159,15 +162,15 @@ func (p *Plugin) verifyJenkinsCredentials(username, token string) (bool, error) 
 		return false, err
 	}
 	scheme := u.Scheme
-	url := fmt.Sprintf("%s://%s:%s@%s", scheme, username, token, u.Host)
-	response, respErr := http.Get(url)
+	response, respErr := http.Get(fmt.Sprintf("%s://%s:%s@%s", scheme, username, token, u.Host))
 	if respErr != nil {
 		return false, respErr
 	}
+	defer response.Body.Close()
 	if response.StatusCode == 200 {
 		return true, nil
 	}
-	return false, errors.New("Error verifying Jenkins credentials")
+	return false, errors.New("error verifying Jenkins credentials")
 }
 
 // createEphemeralPost creates an ephemeral post
@@ -235,7 +238,7 @@ func (p *Plugin) getJob(userID, jobName string) (*gojenkins.Job, error) {
 
 	containsSlash := strings.Contains(jobName, "/")
 	if containsSlash {
-		jobName = strings.Replace(jobName, "/", "/job/", -1)
+		jobName = strings.ReplaceAll(jobName, "/", "/job/")
 	}
 
 	job, jobErr := jenkins.GetJob(jobName)
@@ -279,7 +282,7 @@ func (p *Plugin) triggerJenkinsJob(userID, channelID, jobName string, parameters
 	}
 	containsSlash := strings.Contains(jobName, "/")
 	if containsSlash {
-		jobName = strings.Replace(jobName, "/", "/job/", -1)
+		jobName = strings.ReplaceAll(jobName, "/", "/job/")
 	}
 	buildQueueID, buildErr := p.buildJenkinsJob(jenkins, userID, channelID, jobName, parameters)
 	if buildErr != nil {
@@ -305,7 +308,7 @@ func (p *Plugin) buildJenkinsJob(jenkins *gojenkins.Jenkins, userID, channelID, 
 		return -1, errors.Wrap(buildErr, "Error building the job as a previous build is still in queue.")
 	}
 
-	p.createPost(userID, channelID, fmt.Sprintf("Job '%s' has been triggered and is in queue.", strings.Replace(jobName, "/job/", "/", -1)))
+	p.createPost(userID, channelID, fmt.Sprintf("Job '%s' has been triggered and is in queue.", strings.ReplaceAll(jobName, "/job/", "/")))
 	return buildQueueID, nil
 }
 
@@ -321,7 +324,9 @@ func (p *Plugin) checkIfJobHasStarted(jenkins *gojenkins.Jenkins, jobName string
 			break
 		}
 		time.Sleep(pollingSleepTime * time.Second)
-		task.Poll()
+		if _, err := task.Poll(); err != nil {
+			p.API.LogWarn("Error polling jenkins job to check the build status", "err", err)
+		}
 	}
 	buildInfo, buildErr := jenkins.GetBuild(jobName, task.Raw.Executable.Number)
 	if buildErr != nil {
@@ -452,11 +457,11 @@ func (p *Plugin) createDialogForParameters(userID, triggerID, jobName, channelID
 		return errors.Wrap(err, "Error fetching job parameters")
 	}
 
-	var dialogueElementArr []model.DialogElement
+	var dialogElementArr []model.DialogElement
 
 	for i := 0; i < len(jobParameters); i++ {
 		d := model.DialogElement{DisplayName: jobParameters[i].Name, Name: jobParameters[i].Name, Type: "text", SubType: "text"}
-		dialogueElementArr = append(dialogueElementArr, d)
+		dialogElementArr = append(dialogElementArr, d)
 	}
 	siteURL := *p.API.GetConfig().ServiceSettings.SiteURL
 	encodedJobName, _ := url.Parse(jobName)
@@ -467,7 +472,7 @@ func (p *Plugin) createDialogForParameters(userID, triggerID, jobName, channelID
 			Title:       fmt.Sprintf("Parameters of %s", jobName),
 			CallbackId:  userID,
 			SubmitLabel: "Trigger job",
-			Elements:    dialogueElementArr,
+			Elements:    dialogElementArr,
 		},
 	}
 	dialogErr := p.API.OpenInteractiveDialog(dialog)
@@ -560,7 +565,7 @@ func (p *Plugin) getListOfInstalledPlugins(userID, channelID string) error {
 		if v.Enabled {
 			status = "Enabled"
 		}
-		msg = msg + fmt.Sprintf("%d. %s - %s - %s\n", k+1, v.LongName, v.Version, status)
+		msg += fmt.Sprintf("%d. %s - %s - %s\n", k+1, v.LongName, v.Version, status)
 	}
 	p.createPost(userID, channelID, msg)
 	return nil
@@ -581,7 +586,7 @@ func (p *Plugin) createDialogForJobCreation(userID, channelID, triggerID string)
 		TriggerId: triggerID,
 		URL:       fmt.Sprintf("%s/plugins/jenkins/createJob", *config.ServiceSettings.SiteURL),
 		Dialog: model.Dialog{
-			Title:       fmt.Sprintf("Please paste the contents of config.xml file here"),
+			Title:       "Please paste the contents of config.xml file here",
 			CallbackId:  userID,
 			SubmitLabel: "Create job",
 			Elements: []model.DialogElement{{
@@ -590,7 +595,7 @@ func (p *Plugin) createDialogForJobCreation(userID, channelID, triggerID string)
 				Type:        "text",
 				SubType:     "text",
 				HelpText:    "Please use double quotes if the job name has spaces in it.",
-				MaxLength:   10000, //Should revist this?
+				MaxLength:   10000, // Should revist this?
 			}, {
 				DisplayName: "Config.xml",
 				Name:        "ConfigXml",
@@ -607,7 +612,7 @@ func (p *Plugin) createDialogForJobCreation(userID, channelID, triggerID string)
 	return nil
 }
 
-// sendJobCreateRequest first parses the job name to analyse the folder and job names to be created
+// sendJobCreateRequest first parses the job name to analyze the folder and job names to be created
 // and triggers a job creation request using the contents of config.xml pasted in the dialog.
 func (p *Plugin) sendJobCreateRequest(userID, channelID string, parameters map[string]string) error {
 	jobName := parameters["JobName"]

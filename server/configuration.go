@@ -77,7 +77,7 @@ func (p *Plugin) setConfiguration(configuration *configuration, serverConfigurat
 	}
 
 	if serverConfiguration.ServiceSettings.SiteURL != nil {
-		configuration.ProfileImageURL = path.Join("/plugins", manifest.Id, "assets", "jenkins.png")
+		configuration.ProfileImageURL = path.Join("/plugins", manifest.ID, "assets", "jenkins.png")
 	}
 
 	p.configuration = configuration
