@@ -20,13 +20,13 @@
         "settings": [
             {
                 "key": "JenkinsURL",
-                "display_name": "Jenkins URL",
+                "display_name": "Jenkins URL:",
                 "type": "text",
                 "help_text": "The URL for your Jenkins instance. Must start with http:// or https://. For example: https://jenkins.example.com."
             },
             {
                 "key": "EncryptionKey",
-                "display_name": "At Rest Encryption Key",
+                "display_name": "At Rest Encryption Key:",
                 "type": "generated",
                 "help_text": "The AES encryption key used to encrypt stored access tokens."
             }
