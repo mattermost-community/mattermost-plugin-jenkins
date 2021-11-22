@@ -13,10 +13,12 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/mattermost/mattermost-server/v5/model"
-	"github.com/mattermost/mattermost-server/v5/plugin"
 	"github.com/pkg/errors"
 	"github.com/waseem18/gojenkins"
+
+	pluginapi "github.com/mattermost/mattermost-plugin-api"
+	"github.com/mattermost/mattermost-server/v6/model"
+	"github.com/mattermost/mattermost-server/v6/plugin"
 )
 
 const (
@@ -28,6 +30,7 @@ const (
 
 type Plugin struct {
 	plugin.MattermostPlugin
+	client *pluginapi.Client
 
 	router *mux.Router
 
@@ -48,7 +51,9 @@ type JenkinsUserInfo struct {
 }
 
 func (p *Plugin) OnActivate() error {
-	botUserID, err := p.Helpers.EnsureBot(&model.Bot{
+	p.client = pluginapi.NewClient(p.API, p.Driver)
+
+	botUserID, err := p.client.Bot.EnsureBot(&model.Bot{
 		Username:    botUserName,
 		DisplayName: botDisplayName,
 		Description: botDescription,
@@ -179,7 +184,7 @@ func (p *Plugin) createEphemeralPost(userID, channelID, message string) {
 		UserId:    p.botUserID,
 		ChannelId: channelID,
 		Message:   message,
-		Type:      model.POST_DEFAULT,
+		Type:      model.PostTypeDefault,
 	}
 	p.API.SendEphemeralPost(userID, post)
 }
@@ -197,7 +202,7 @@ func (p *Plugin) createPost(userID, channelID, message string, fileIds ...string
 	post := &model.Post{
 		UserId:    p.botUserID,
 		ChannelId: channelID,
-		Type:      model.POST_DEFAULT,
+		Type:      model.PostTypeDefault,
 		Props: map[string]interface{}{
 			"attachments": []*model.SlackAttachment{slackAttachment},
 		},

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -8,11 +9,10 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/gorilla/mux"
-	"github.com/mattermost/mattermost-server/v5/model"
-	"github.com/mattermost/mattermost-server/v5/plugin"
+	"github.com/mattermost/mattermost-server/v6/model"
+	"github.com/mattermost/mattermost-server/v6/plugin"
 )
 
 func (p *Plugin) InitAPI() *mux.Router {
@@ -46,10 +46,10 @@ func (p *Plugin) handleBuildTrigger(w http.ResponseWriter, r *http.Request) {
 	}
 
 	body, _ := ioutil.ReadAll(r.Body)
-	bodyString := string(body)
 
-	request := model.SubmitDialogRequestFromJson(strings.NewReader(bodyString))
-	if request == nil {
+	var request model.SubmitDialogRequest
+	err := json.Unmarshal(body, &request)
+	if err == nil {
 		p.API.LogError("failed to decode request")
 		return
 	}
@@ -75,10 +75,10 @@ func (p *Plugin) handleJobCreation(w http.ResponseWriter, r *http.Request) {
 	}
 
 	body, _ := ioutil.ReadAll(r.Body)
-	bodyString := string(body)
 
-	request := model.SubmitDialogRequestFromJson(strings.NewReader(bodyString))
-	if request == nil {
+	var request model.SubmitDialogRequest
+	err := json.Unmarshal(body, &request)
+	if err == nil {
 		p.API.LogError("failed to decode request")
 		return
 	}
