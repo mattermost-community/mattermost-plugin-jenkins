@@ -310,7 +310,7 @@ func (p *Plugin) buildJenkinsJob(jenkins *gojenkins.Jenkins, userID, channelID, 
 
 	if buildQueueID == 0 {
 		p.createEphemeralPost(userID, channelID, "A build of this job is still in queue.\n Please trigger the job after the job's build queue is free.")
-		return -1, errors.Wrap(buildErr, "Error building the job as a previous build is still in queue.")
+		return -1, errors.Wrap(buildErr, "error building the job as a previous build is still in queue")
 	}
 
 	p.createPost(userID, channelID, fmt.Sprintf("Job '%s' has been triggered and is in queue.", strings.ReplaceAll(jobName, "/job/", "/")))
