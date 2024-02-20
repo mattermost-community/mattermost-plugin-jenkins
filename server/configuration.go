@@ -4,7 +4,7 @@ import (
 	"path"
 	"reflect"
 
-	"github.com/mattermost/mattermost-server/v6/model"
+	"github.com/mattermost/mattermost/server/public/model"
 	"github.com/pkg/errors"
 )
 
@@ -77,7 +77,7 @@ func (p *Plugin) setConfiguration(configuration *configuration, serverConfigurat
 	}
 
 	if serverConfiguration.ServiceSettings.SiteURL != nil {
-		configuration.ProfileImageURL = path.Join("/plugins", manifest.ID, "assets", "jenkins.png")
+		configuration.ProfileImageURL = path.Join("/plugins", manifest.Id, "assets", "jenkins.png")
 	}
 
 	p.configuration = configuration
