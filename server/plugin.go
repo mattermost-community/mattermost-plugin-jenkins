@@ -3,9 +3,9 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -16,9 +16,9 @@ import (
 	"github.com/pkg/errors"
 	"github.com/waseem18/gojenkins"
 
-	pluginapi "github.com/mattermost/mattermost-plugin-api"
-	"github.com/mattermost/mattermost-server/v6/model"
-	"github.com/mattermost/mattermost-server/v6/plugin"
+	"github.com/mattermost/mattermost/server/public/model"
+	"github.com/mattermost/mattermost/server/public/plugin"
+	"github.com/mattermost/mattermost/server/public/pluginapi"
 )
 
 const (
@@ -68,7 +68,7 @@ func (p *Plugin) OnActivate() error {
 		return errors.Wrap(err, "failed to get bundle path")
 	}
 
-	profileImage, err := ioutil.ReadFile(filepath.Join(bundlePath, "assets", "jenkins.png"))
+	profileImage, err := os.ReadFile(filepath.Join(bundlePath, "assets", "jenkins.png"))
 	if err != nil {
 		return errors.Wrap(err, "failed to read profile image")
 	}

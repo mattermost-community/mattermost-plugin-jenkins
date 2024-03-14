@@ -4,15 +4,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 
 	"github.com/gorilla/mux"
-	"github.com/mattermost/mattermost-server/v6/model"
-	"github.com/mattermost/mattermost-server/v6/plugin"
+	"github.com/mattermost/mattermost/server/public/model"
+	"github.com/mattermost/mattermost/server/public/plugin"
 )
 
 func (p *Plugin) InitAPI() *mux.Router {
@@ -45,7 +44,7 @@ func (p *Plugin) handleBuildTrigger(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body, _ := ioutil.ReadAll(r.Body)
+	body, _ := io.ReadAll(r.Body)
 
 	var request model.SubmitDialogRequest
 	err := json.Unmarshal(body, &request)
@@ -74,7 +73,7 @@ func (p *Plugin) handleJobCreation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body, _ := ioutil.ReadAll(r.Body)
+	body, _ := io.ReadAll(r.Body)
 
 	var request model.SubmitDialogRequest
 	err := json.Unmarshal(body, &request)
@@ -95,7 +94,7 @@ func (p *Plugin) handleJobCreation(w http.ResponseWriter, r *http.Request) {
 func (p *Plugin) handleProfileImage(w http.ResponseWriter, r *http.Request) {
 	config := p.getConfiguration()
 
-	img, err := os.Open(filepath.Join(config.PluginsDirectory, manifest.ID, "assets", "jenkins.png"))
+	img, err := os.Open(filepath.Join(config.PluginsDirectory, manifest.Id, "assets", "jenkins.png"))
 	if err != nil {
 		http.NotFound(w, r)
 		p.API.LogError("unable to read Jenkins profile image", "err", err.Error())
