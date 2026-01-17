@@ -628,7 +628,7 @@ func (p *Plugin) sendJobCreateRequest(userID, channelID string, parameters map[s
 		return errors.Wrap(jenkinsErr, "Error creating Jenkins client")
 	}
 
-	jobName, extraParam, ok := parseBuildParameters(strings.Split(jobName, " "))
+	jobName, extraParam, _, ok := parseBuildParameters(strings.Split(jobName, " "))
 	if !ok || extraParam != "" {
 		p.createEphemeralPost(userID, channelID, "Please check `/jenkins help` to find help on how to create a job.")
 		return errors.New("error while creating the job")

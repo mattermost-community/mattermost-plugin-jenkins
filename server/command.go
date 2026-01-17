@@ -182,40 +182,15 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*mo
 			return p.getCommandResponse(args, "Your Jenkins account has been successfully connected to Mattermost."), nil
 		}
 	case "build":
-		if len(parameters) == 0 {
-			return p.getCommandResponse(args, jobNotSpecifiedResponse), nil
-		} else if len(parameters) >= 1 {
-			jobName, extraParam, ok := parseBuildParameters(parameters)
-			if !ok || extraParam != "" {
-				return p.getCommandResponse(args, "Please check `/jenkins help` to find help on how to get trigger a job."), nil
-			}
-
-			hasParameters, paramErr := p.checkIfJobAcceptsParameters(args.UserId, jobName)
-			if paramErr != nil {
-				p.API.LogError("Error checking for parameters", "err", paramErr.Error())
-				return p.getCommandResponse(args, fmt.Sprintf("Error triggering build for the job '%s'.", jobName)), nil
-			}
-
-			if hasParameters {
-				err := p.createDialogForParameters(args.UserId, args.TriggerId, jobName, args.ChannelId)
-				if err != nil {
-					p.API.LogError("Error creating dialog", "err", err.Error())
-					return p.getCommandResponse(args, fmt.Sprintf("Error triggering build for the job '%s'.", jobName)), nil
-				}
-			} else {
-				build, err := p.triggerJenkinsJob(args.UserId, args.ChannelId, jobName, nil)
-				if err != nil {
-					p.API.LogError("Error triggering build", "job_name", jobName, "err", err.Error())
-					return p.getCommandResponse(args, fmt.Sprintf("Error triggering build for the job '%s'.", jobName)), nil
-				}
-				p.createPost(args.UserId, args.ChannelId, fmt.Sprintf("Job '%s' - #%d has been started\nBuild URL : %s", jobName, build.GetBuildNumber(), build.GetUrl()))
-			}
+		response, appError, done := p.executeBuildCommand(parameters, args)
+		if done {
+			return response, appError
 		}
 	case "get-artifacts":
 		if len(parameters) == 0 {
 			return p.getCommandResponse(args, jobNotSpecifiedResponse), nil
 		} else if len(parameters) >= 1 {
-			jobName, buildNumber, ok := parseBuildParameters(parameters)
+			jobName, buildNumber, _, ok := parseBuildParameters(parameters)
 			if !ok {
 				return p.getCommandResponse(args, "Please check `/jenkins help` to find help on how to get artifacts of a build."), nil
 			}
@@ -237,7 +212,7 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*mo
 		if len(parameters) == 0 {
 			return p.getCommandResponse(args, jobNotSpecifiedResponse), nil
 		} else if len(parameters) >= 1 {
-			jobName, buildNumber, ok := parseBuildParameters(parameters)
+			jobName, buildNumber, _, ok := parseBuildParameters(parameters)
 			if !ok {
 				return p.getCommandResponse(args, "Please check `/jenkins help` to find help on how to get test results of a build."), nil
 			}
@@ -259,7 +234,7 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*mo
 		if len(parameters) == 0 {
 			return p.getCommandResponse(args, "Please specify a job to disable."), nil
 		} else if len(parameters) >= 1 {
-			jobName, extraParam, ok := parseBuildParameters(parameters)
+			jobName, extraParam, _, ok := parseBuildParameters(parameters)
 			if !ok || extraParam != "" {
 				return p.getCommandResponse(args, "Please check `/jenkins help` to find help on how to disable a job."), nil
 			}
@@ -274,7 +249,7 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*mo
 		if len(parameters) == 0 {
 			return p.getCommandResponse(args, "Please specify a job to enable."), nil
 		} else if len(parameters) >= 1 {
-			jobName, extraParam, ok := parseBuildParameters(parameters)
+			jobName, extraParam, _, ok := parseBuildParameters(parameters)
 			if !ok || extraParam != "" {
 				return p.getCommandResponse(args, "Please check `/jenkins help` to find help on how to enable a job."), nil
 			}
@@ -313,7 +288,7 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*mo
 		if len(parameters) == 0 {
 			return p.getCommandResponse(args, "Please specify a job name or jobname and build number."), nil
 		} else if len(parameters) >= 1 {
-			jobName, buildNumber, ok := parseBuildParameters(parameters)
+			jobName, buildNumber, _, ok := parseBuildParameters(parameters)
 			if !ok {
 				return p.getCommandResponse(args, "Please check `/jenkins help` to find help on how to get log of a build."), nil
 			}
@@ -328,7 +303,7 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*mo
 		if len(parameters) == 0 {
 			return p.getCommandResponse(args, "Please specify a job name or jobname and build number."), nil
 		} else if len(parameters) >= 1 {
-			jobName, buildNumber, ok := parseBuildParameters(parameters)
+			jobName, buildNumber, _, ok := parseBuildParameters(parameters)
 			if !ok {
 				return p.getCommandResponse(args, "Please check `/jenkins help` to find help on how to abort a build."), nil
 			}
@@ -350,7 +325,7 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*mo
 		if len(parameters) == 0 {
 			return p.getCommandResponse(args, "Please specify a job name or jobname and build number."), nil
 		} else if len(parameters) >= 1 {
-			jobName, extraParam, ok := parseBuildParameters(parameters)
+			jobName, extraParam, _, ok := parseBuildParameters(parameters)
 			if !ok || extraParam != "" {
 				return p.getCommandResponse(args, "Please check `/jenkins help` to find help on how to delete a job."), nil
 			}
@@ -392,4 +367,42 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*mo
 		return p.getCommandResponse(args, text), nil
 	}
 	return &model.CommandResponse{}, nil
+}
+
+func (p *Plugin) executeBuildCommand(parameters []string, args *model.CommandArgs) (*model.CommandResponse, *model.AppError, bool) {
+	if len(parameters) == 0 {
+		return p.getCommandResponse(args, jobNotSpecifiedResponse), nil, true
+	}
+	if len(parameters) >= 1 {
+		jobName, _, params, ok := parseBuildParameters(parameters)
+		if !ok {
+			return p.getCommandResponse(args, "Please check `/jenkins help` to find help on how to get trigger a job."), nil, true
+		}
+
+		hasParameters, paramErr := p.checkIfJobAcceptsParameters(args.UserId, jobName)
+		if paramErr != nil {
+			p.API.LogError("Error checking for parameters", "err", paramErr.Error())
+			return p.getCommandResponse(args, fmt.Sprintf("Error triggering build for the job '%s'.", jobName)), nil, true
+		}
+
+		if hasParameters && len(params) == 0 {
+			err := p.createDialogForParameters(args.UserId, args.TriggerId, jobName, args.ChannelId)
+			if err != nil {
+				p.API.LogError("Error creating dialog", "err", err.Error())
+				return p.getCommandResponse(args, fmt.Sprintf("Error triggering build for the job '%s'.", jobName)), nil, true
+			}
+		} else {
+			go func(job string, parameters map[string]string, userID, channelID string) {
+				build, err := p.triggerJenkinsJob(userID, channelID, job, parameters)
+				if err != nil {
+					p.API.LogError("Error triggering build", "job_name", job, "err", err.Error())
+					p.createPost(userID, channelID, fmt.Sprintf("Error triggering build for the job '%s'.", job))
+					return
+				}
+				p.createPost(userID, channelID, fmt.Sprintf("Job '%s' - #%d has been started\nBuild URL : %s", job, build.GetBuildNumber(), build.GetUrl()))
+			}(jobName, params, args.UserId, args.ChannelId)
+			return p.getCommandResponse(args, "Build triggered; check channel for updates."), nil, true
+		}
+	}
+	return nil, nil, false
 }

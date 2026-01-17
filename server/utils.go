@@ -11,7 +11,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"io"
-	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/mattermost/mattermost/server/public/model"
@@ -82,30 +82,91 @@ func decrypt(key []byte, text string) (string, error) {
 	return string(unpadMsg), nil
 }
 
-// parseBuildParameters checks if the parameters are valid and returns three values.
-// The first return value is considered as job name and the second value is considered as build number.
-// Examples of valid parameters as per the regex:
-// 1. jobname OR folder/jobname
-// 2. jobname 22 OR folder/jobname 22
-// 3. "jobname" OR "folder/jobname"
-// 4. "jobname" 22 OR "folder/jobname" 22
-// 5. "job name with space" OR "folder/job name with space" OR "folder with space/job name with space"
-// 6. "job name with space" 22 OR "folder with space/job name with space" 22
-func parseBuildParameters(parameters []string) (string, string, bool) {
-	paramString := strings.Join(parameters, " ")
-	if len(parameters) == 1 {
-		if strings.HasPrefix(paramString, "\"") && strings.HasSuffix(paramString, "\"") {
-			tempString := strings.TrimLeft(strings.TrimRight(paramString, `\"`), `\"`)
-			return tempString, "", true
+// parseBuildParameters checks if the parameters are valid and returns multiple values.
+// The first return value is considered as job name.
+// The second return value is considered as build number (when applicable).
+// The third return value is a map containing the key=value parameters.
+// The last boolean return value indicates if the parsing was successful.
+func parseBuildParameters(parameters []string) (string, string, map[string]string, bool) {
+	if len(parameters) == 0 {
+		return "", "", nil, false
+	}
+
+	// Handle the job name (which might be quoted with spaces)
+	jobNameParts := []string{}
+	paramIndex := 0
+
+	// Collect job name parts until we find a closing quote or a non-quoted parameter
+	inQuotes := false
+	if len(parameters) > 0 && strings.HasPrefix(parameters[0], "\"") {
+		inQuotes = true
+		// Remove the starting quote
+		parameters[0] = strings.TrimPrefix(parameters[0], "\"")
+
+		if strings.HasSuffix(parameters[0], "\"") {
+			// Handle case: "job name"
+			parameters[0] = strings.TrimSuffix(parameters[0], "\"")
+			jobNameParts = append(jobNameParts, parameters[0])
+			paramIndex = 1
+			inQuotes = false
+		} else {
+			// Start collecting job name parts
+			jobNameParts = append(jobNameParts, parameters[0])
+			paramIndex = 1
 		}
-		return paramString, "", true
+	} else if len(parameters) > 0 {
+		// Simple non-quoted job name
+		jobNameParts = append(jobNameParts, parameters[0])
+		paramIndex = 1
 	}
-	regex := regexp.MustCompile(`("[^"]*"|[^"\s]+)\s*(\w*)`)
-	submatches := regex.FindAllStringSubmatch(paramString, -1)
-	if len(submatches) == 0 || len(submatches) > 1 {
-		return "", "", false
+
+	// Continue collecting job name parts if we're in quotes
+	for paramIndex < len(parameters) && inQuotes {
+		if strings.HasSuffix(parameters[paramIndex], "\"") {
+			// Found closing quote
+			parameters[paramIndex] = strings.TrimSuffix(parameters[paramIndex], "\"")
+			jobNameParts = append(jobNameParts, parameters[paramIndex])
+			paramIndex++
+			inQuotes = false
+		} else {
+			// Still in quotes
+			jobNameParts = append(jobNameParts, parameters[paramIndex])
+			paramIndex++
+		}
 	}
-	return strings.TrimLeft(strings.TrimRight(submatches[0][1], `\"`), `\"`), submatches[0][2], true
+
+	jobName := strings.Join(jobNameParts, " ")
+
+	// Process build number and parameters
+	buildNumber := ""
+	var paramMap map[string]string
+
+	// Check if the next parameter is a build number (numeric)
+	if paramIndex < len(parameters) && isNumeric(parameters[paramIndex]) {
+		buildNumber = parameters[paramIndex]
+		paramIndex++
+	}
+
+	// Process key=value parameters
+	for i := paramIndex; i < len(parameters); i++ {
+		if strings.Contains(parameters[i], "=") {
+			parts := strings.SplitN(parameters[i], "=", 2)
+			if len(parts) == 2 {
+				if paramMap == nil {
+					paramMap = make(map[string]string)
+				}
+				paramMap[parts[0]] = parts[1]
+			}
+		}
+	}
+
+	return jobName, buildNumber, paramMap, true
+}
+
+// Helper function to check if a string is numeric
+func isNumeric(s string) bool {
+	_, err := strconv.Atoi(s)
+	return err == nil
 }
 
 func generateSlackAttachment(text string) *model.SlackAttachment {
